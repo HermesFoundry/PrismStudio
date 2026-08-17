@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=PrismStudio
+GenericName=Code Editor
+Comment=An editor with Claude beside it
+Exec=__PRISM__ %F
+Icon=foundry.hermes.PrismStudio
+Terminal=false
+Categories=Development;IDE;TextEditor;
+Keywords=editor;code;programming;claude;
+StartupNotify=true
+StartupWMClass=PrismStudio
+MimeType=text/plain;text/x-python;text/x-csrc;application/javascript;inode/directory;
+Actions=NewWindow;
+
+[Desktop Action NewWindow]
+Name=New Window
+Exec=__PRISM__
