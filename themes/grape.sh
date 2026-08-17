@@ -1,0 +1,5 @@
+NAME="Grape"; BLURB="violet dusk, orchid accent"
+BG="#16121f"; PANEL="#241c33"; FG="#ded6f2"; DIM="#6b5f87"
+ACCENT="#c792ea"; ACCENT2="#82aaff"; URGENT="#ff5370"; OK="#96d982"
+BORDER="#3a2f52"; ACTIVE_FG="#140f1e"
+ANSI16="#241c33 #ff5370 #96d982 #ffcb6b #82aaff #c792ea #89ddff #ded6f2 #6b5f87 #ff7a92 #b0e59f #ffd98a #a3c0ff #d9b3f0 #a8e8ff #ffffff"

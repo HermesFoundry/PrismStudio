@@ -1,0 +1,5 @@
+NAME="Nord"; BLURB="cold blue-grey, low contrast — long sessions"
+BG="#2e3440"; PANEL="#3b4252"; FG="#d8dee9"; DIM="#667486"
+ACCENT="#88c0d0"; ACCENT2="#a3be8c"; URGENT="#bf616a"; OK="#a3be8c"
+BORDER="#4c566a"; ACTIVE_FG="#2e3440"
+ANSI16="#3b4252 #bf616a #a3be8c #ebcb8b #81a1c1 #b48ead #88c0d0 #d8dee9 #4c566a #d08770 #b9d3a0 #f0d8a0 #8fbcbb #c9a0c4 #9fd6e0 #eceff4"

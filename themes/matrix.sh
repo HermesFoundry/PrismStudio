@@ -1,0 +1,5 @@
+NAME="Matrix"; BLURB="black on green — maximum contrast"
+BG="#000000"; PANEL="#061a06"; FG="#b8ffb8"; DIM="#2f6b2f"
+ACCENT="#35ff6a"; ACCENT2="#a6ff4d"; URGENT="#ff4040"; OK="#35ff6a"
+BORDER="#114411"; ACTIVE_FG="#001200"
+ANSI16="#061a06 #ff4040 #35ff6a #a6ff4d #2fbf6a #6bff9e #4dffb0 #b8ffb8 #2f6b2f #ff6b6b #6bff92 #c8ff7a #57d98c #97ffc0 #85ffd0 #e0ffe0"

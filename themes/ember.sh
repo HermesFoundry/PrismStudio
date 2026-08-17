@@ -1,0 +1,5 @@
+NAME="Ember"; BLURB="warm charcoal, amber accent — easy at night"
+BG="#14100d"; PANEL="#241a14"; FG="#ecdcc9"; DIM="#7a6250"
+ACCENT="#ff9d4d"; ACCENT2="#ffd27f"; URGENT="#ff5f56"; OK="#b8c25f"
+BORDER="#3a2a1e"; ACTIVE_FG="#1a1006"
+ANSI16="#241a14 #ff5f56 #b8c25f #ffd27f #d9a066 #e08a5f #e6b98a #ecdcc9 #7a6250 #ff8079 #cdd67f #ffe0a3 #e8b98a #f0a97f #f2d2ac #fff6e8"

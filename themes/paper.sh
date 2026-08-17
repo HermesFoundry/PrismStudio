@@ -1,0 +1,5 @@
+NAME="Paper"; BLURB="ink on cream — daylight / projector friendly"
+BG="#f4f1ea"; PANEL="#e6e1d6"; FG="#2f2b26"; DIM="#8a8377"
+ACCENT="#1a6fb5"; ACCENT2="#a3641a"; URGENT="#b3261e"; OK="#2e7d32"
+BORDER="#cdc6b8"; ACTIVE_FG="#f8f6f1"
+ANSI16="#2f2b26 #b3261e #2e7d32 #8a6d1f #1a6fb5 #7b3fa0 #0f7b7b #4a463f #8a8377 #d0453c #43994a #a8862c #3389cf #9459bd #2c9a9a #2f2b26"

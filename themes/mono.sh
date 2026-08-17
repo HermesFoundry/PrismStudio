@@ -1,0 +1,5 @@
+NAME="Mono"; BLURB="greyscale, no colour noise"
+BG="#101010"; PANEL="#1c1c1c"; FG="#d0d0d0"; DIM="#6a6a6a"
+ACCENT="#ffffff"; ACCENT2="#b0b0b0"; URGENT="#ff8787"; OK="#cccccc"
+BORDER="#333333"; ACTIVE_FG="#101010"
+ANSI16="#1c1c1c #d08a8a #b0b0b0 #d0d0d0 #a0a0a0 #c0c0c0 #b8b8b8 #d0d0d0 #6a6a6a #ff8787 #cccccc #e8e8e8 #bbbbbb #dddddd #d4d4d4 #ffffff"

@@ -1,0 +1,5 @@
+NAME="Olympus"; BLURB="deep navy, azure accent — the house style"
+BG="#0b1017"; PANEL="#16202c"; FG="#cbd6e3"; DIM="#55677d"
+ACCENT="#4fb3ff"; ACCENT2="#7de3c8"; URGENT="#ff6b81"; OK="#6fd48b"
+BORDER="#263445"; ACTIVE_FG="#08101a"
+ANSI16="#16202c #ff6b81 #6fd48b #ffcc66 #4fb3ff #c792ea #7de3c8 #cbd6e3 #55677d #ff8fa0 #8ee6a6 #ffdb8a #7cc9ff #dcb0f5 #a5f0dc #ffffff"
