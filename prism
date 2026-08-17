@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# PrismStudio — an editor with Claude beside it.
+#
+#   prism                 open the folder you had last time
+#   prism .               open this folder
+#   prism ~/project       open that folder
+#   prism a.py b.py       open those files
+set -euo pipefail
+HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+exec python3 "$HERE/app/prism_main.py" "$@"
