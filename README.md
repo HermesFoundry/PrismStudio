@@ -22,14 +22,53 @@ GTK3, Python, native. No Electron, no browser, no telemetry.
 
 ---
 
+## Install
+
+One command. It checks what is missing, offers to install it, clones, sets it
+up and opens it:
+
 ```sh
-git clone git@github.com:HermesFoundry/PrismStudio.git
+bash <(curl -fsSL https://raw.githubusercontent.com/HermesFoundry/PrismStudio/main/get.sh)
+```
+
+It asks before installing anything and before using `sudo`, and prints every
+command before it runs it. `--dry-run` shows what it would do and changes
+nothing; `--yes` skips the questions; `--dir PATH` puts it somewhere other than
+`~/PrismStudio`. Read it first if you would rather —
+[`get.sh`](get.sh) is about two hundred lines and does nothing clever.
+
+It knows the package names for apt, dnf, pacman, zypper and apk, and works out
+what you are missing by importing it rather than by asking the package
+database, which can be right while the import still fails.
+
+<details>
+<summary>Or do it yourself</summary>
+
+```sh
+git clone https://github.com/HermesFoundry/PrismStudio.git
 cd PrismStudio && ./install.sh     # links `prism`, adds a desktop entry
 prism .                            # open this folder
 ```
 
-`install.sh` tells you which of `python3-gi`, `gir1.2-vte-2.91` and
-`gir1.2-gtksource-4` are missing rather than failing on import.
+Nothing is compiled: it is Python, run from wherever you put it. `install.sh`
+only puts it on your PATH and in the applications menu, and names whichever of
+`python3-gi`, `gir1.2-vte-2.91` and `gir1.2-gtksource-4` is missing rather than
+failing on an import.
+
+On Debian and Ubuntu:
+
+```sh
+sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
+                 gir1.2-vte-2.91 gir1.2-gtksource-4 git
+```
+
+</details>
+
+> **Linux only.** The terminal panel, the Claude pane and the run bar are built
+> on **VTE**, which spawns children on a Unix pseudoterminal. Windows has no
+> equivalent and VTE has no port, so there is no native Windows build and no
+> macOS one. On Windows, run it under **WSL2** — with WSLg it opens as an
+> ordinary window and everything works, including the terminal.
 
 | | |
 |---|---|
