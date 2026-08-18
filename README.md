@@ -35,7 +35,7 @@ It asks before installing anything and before using `sudo`, and prints every
 command before it runs it. `--dry-run` shows what it would do and changes
 nothing; `--yes` skips the questions; `--dir PATH` puts it somewhere other than
 `~/PrismStudio`. Read it first if you would rather —
-[`get.sh`](get.sh) is about two hundred lines and does nothing clever.
+[`get.sh`](get.sh) is a few hundred lines of shell and does nothing clever.
 
 It knows the package names for apt, dnf, pacman, zypper and apk, and works out
 what you are missing by importing it rather than by asking the package
