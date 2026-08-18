@@ -13,6 +13,7 @@ def build_css(t, cfg):
     dim, accent, accent2 = t["DIM"], t["ACCENT"], t["ACCENT2"]
     border, urgent, ok = t["BORDER"], t["URGENT"], t["OK"]
     on_accent = readable_on(accent)
+    on_accent2 = readable_on(accent2)
     light = luminance(bg) > 0.5
 
     head = mix(panel, fg, 0.04) if not light else mix(panel, "#000000", 0.04)
@@ -331,4 +332,44 @@ paned > separator:hover {{ background: {accent}; }}
     border-radius: 6px; padding: 3px 10px;
 }}
 .prefs button:hover {{ border-color: {accent}; }}
+/* Where there is no window manager to draw one, GTK draws its own
+   title bar and it arrives Adwaita-white. */
+.prefs headerbar, .prefs .titlebar {{
+    background: {head}; color: {fg}; border-bottom: 1px solid {border};
+}}
+
+/* ---- the update card --------------------------------------------------- */
+.whatsnew {{ background: {bg}; }}
+.wnhead {{ background: {head}; border-bottom: 1px solid {border}; }}
+.wntitle {{ color: {fg}; font-size: 17px; font-weight: 700; }}
+.wnsub {{ color: {dim}; font-size: 11px; }}
+.wnflag {{
+    background: {accent2}; color: {on_accent2}; font-size: 11px;
+    font-weight: 700;
+    padding: 4px 20px;
+}}
+.wnnotes {{ background: {bg}; }}
+.wnbullet {{ color: {accent}; }}
+.wnnote {{ color: {fg}; font-size: 12px; }}
+/* `.prefs button` is class+element, so a bare `.wnbtn` loses to it. These
+   selectors have to outrank it or the buttons stay the preferences grey. */
+.wnactions {{
+    background: {head}; border-top: 1px solid {border}; padding: 12px 16px;
+}}
+.whatsnew button.wnbtn {{
+    background: {raised}; color: {fg}; border: 1px solid {border};
+    border-radius: 6px; padding: 6px 15px; font-size: 12px;
+}}
+.whatsnew button.wnbtn:hover {{ border-color: {accent}; background: {panel}; }}
+.whatsnew button.wnprimary {{
+    background: {accent}; color: {on_accent}; border-color: {accent};
+    font-weight: 700;
+}}
+.whatsnew button.wnprimary:hover {{
+    background: {accent}; border-color: {fg}; color: {on_accent};
+}}
+.wncmd {{
+    background: {raised}; color: {dim}; font-family: monospace; font-size: 11px;
+    padding: 9px 20px; border-top: 1px solid {border};
+}}
 """

@@ -76,6 +76,7 @@ ACTIONS = [
     ("new-window",      "New window",               "App",    "Ctrl+Shift+M",      "Ctrl+Shift+M"),
     ("preferences",     "Preferences",              "App",    "Ctrl+comma",        "Ctrl+comma"),
     ("keymap",          "Keyboard shortcuts",       "App",    "F1, Ctrl+slash",    "F1"),
+    ("check-updates",   "Check for updates",        "App",    "",                  ""),
     ("about",           "About PrismStudio",        "App",    "",                  ""),
     ("quit",            "Quit",                     "App",    "Ctrl+Q",            "Ctrl+Shift+Q"),
 ]

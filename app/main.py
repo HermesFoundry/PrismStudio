@@ -28,6 +28,7 @@ import extensions  # noqa: E402
 import keymap  # noqa: E402
 import lsp  # noqa: E402
 import styling  # noqa: E402
+import updates  # noqa: E402
 import workspace  # noqa: E402
 from assistant import Assistant  # noqa: E402
 from editor import Editor  # noqa: E402
@@ -59,7 +60,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.get_style_context().add_class("prism")
 
         self.set_default_size(1360, 860)
-        self.set_icon_name("text-editor")
+        self._wear_icon()
 
         # ---- title bar -------------------------------------------------------
         self.header = Gtk.HeaderBar()
@@ -167,11 +168,29 @@ class PrismWindow(Gtk.ApplicationWindow):
 
         self.show_all()
         self._apply_layout()
+        self.updates = updates.Updates(self)
+        self.updates.start()
         if root:
             self.open_folder(root, restore=True)
         else:
             self._sync_title()
             self.editor.show_welcome_if_empty()
+
+    def _wear_icon(self):
+        """Use the shipped icon whether or not install.sh has been run."""
+        self.set_icon_name(core.APP_ID)
+        shipped = os.path.join(core.ROOT, "packaging", "icons", "256.png")
+        if os.path.exists(shipped):
+            try:
+                from gi.repository import GdkPixbuf
+                sizes = [os.path.join(core.ROOT, "packaging", "icons", "%d.png" % s)
+                         for s in (48, 128, 256, 512)]
+                icons = [GdkPixbuf.Pixbuf.new_from_file(p)
+                         for p in sizes if os.path.exists(p)]
+                if icons:
+                    self.set_icon_list(icons)
+            except Exception:
+                pass
 
     @property
     def assistant_enabled(self):
@@ -238,7 +257,9 @@ class PrismWindow(Gtk.ApplicationWindow):
         else:
             menu("Assist", [("Suggest here", "suggest"),
                             ("Change suggestion source", "suggest-mode")])
-        menu("Help", [("Keyboard shortcuts", "keymap"), ("About", "about")])
+        menu("Help", [("Keyboard shortcuts", "keymap"), None,
+                      ("Check for updates", "check-updates"),
+                      ("About", "about")])
         self.header.pack_start(bar)
 
     def _build_header_buttons(self):
@@ -728,6 +749,7 @@ class PrismWindow(Gtk.ApplicationWindow):
             "preferences-extensions": lambda: self.open_prefs(3),
             "keymap": self.show_keymap,
             "about": self.show_about,
+            "check-updates": self.check_updates,
             "quit": self.quit_app,
             "fullscreen": self.toggle_fullscreen,
             "zoom-in": lambda: self.zoom(1),
@@ -851,12 +873,22 @@ class PrismWindow(Gtk.ApplicationWindow):
         dialog.destroy()
         return True
 
+    def check_updates(self):
+        """Help -> Check for updates. Says so either way, unlike the quiet
+        check at startup."""
+        self.updates.check(manual=True)
+        return True
+
     def show_about(self):
         dialog = Gtk.AboutDialog(transient_for=self, modal=True)
         dialog.set_program_name(core.APP_NAME)
+        dialog.set_version(core.VERSION)
         dialog.set_comments("An editor with Claude beside it.\n"
                             "Skins, suggestions, projects and extensions.")
-        dialog.set_logo_icon_name("text-editor")
+        shipped = os.path.join(core.ROOT, "packaging", "icons", "128.png")
+        if os.path.exists(shipped):
+            from gi.repository import GdkPixbuf
+            dialog.set_logo(GdkPixbuf.Pixbuf.new_from_file(shipped))
         dialog.get_style_context().add_class("prefs")
         dialog.run()
         dialog.destroy()
@@ -888,6 +920,7 @@ class PrismWindow(Gtk.ApplicationWindow):
             if unsaved and not self._confirm_unsaved(unsaved):
                 return True
         self._save_session()
+        self.updates.stop()
         self.lsp.shutdown()
         core.save_settings({"SIDEBAR": self.cfg.get("SIDEBAR", "explorer"),
                             "PANEL": self.cfg.get("PANEL", "0"),
