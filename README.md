@@ -10,7 +10,8 @@ GTK3, Python, native. No Electron, no browser, no telemetry.
 <img src="https://img.shields.io/badge/GTK-3-4fb3ff?style=flat-square" alt="GTK 3">
 <img src="https://img.shields.io/badge/Python-3.10%2B-3ddc97?style=flat-square" alt="Python 3.10+">
 <img src="https://img.shields.io/badge/Linux-desktop%20app-f0a848?style=flat-square" alt="Linux desktop app">
-<img src="https://img.shields.io/badge/tests-283%20checks-b48ead?style=flat-square" alt="283 checks">
+<img src="https://img.shields.io/badge/tests-357%20checks-b48ead?style=flat-square" alt="357 checks">
+<img src="https://img.shields.io/badge/version-1.0.0-8fbcbb?style=flat-square" alt="version 1.0.0">
 
 <br>
 
@@ -193,6 +194,55 @@ Two worked examples and the full API: [`extensions/`](extensions/).
 
 ---
 
+## It tells you when there is a new one
+
+<div align="center">
+<img src="docs/media/update.png" width="620" alt="The what's new card">
+</div>
+
+On the first launch after a release lands, a card says what changed. **Update
+now** runs the update in the terminal panel where you can watch it, **Skip this
+version** means never for that one, and **Later** means ask again tomorrow.
+
+It asks one address for a few hundred bytes of JSON. The request carries
+`User-Agent: PrismStudio/<version>` and nothing else: no identifier, no machine
+details, nothing about what you have open. On disk it keeps the time of the
+last check and the version you last skipped, in
+`~/.cache/prismstudio/updates.json`. `UPDATE_CHECK=0` and it never opens a
+socket. The check runs on a thread several seconds after the window is up, so
+an unreachable server costs startup nothing.
+
+**Settings → Updates** has the switch, the address, how often, and a
+**Check now**. It is also `Ctrl+Shift+P` → *Check for updates*.
+
+<details>
+<summary>Publishing one</summary>
+
+The manifest lives in git at
+[`packaging/updates.json`](packaging/updates.json), so what the world is being
+told sits next to the code that says it.
+
+```sh
+# once, on the server, as root — makes /var/www/prismstudio and serves it
+sudo bash packaging/hermes-server-setup.sh
+
+# then, per release, from here
+./packaging/publish-update.py --version 1.1.0 \
+    --note "Source control, the whole panel." \
+    --note "Language servers for thirteen languages." \
+    --important
+```
+
+`publish-update.py` refuses to announce a version that disagrees with
+`VERSION` in `app/core.py`, refuses a release with no notes, parses the result
+with the app's own parser, copies it into place in one move so nobody fetches
+half a file, and then reads it back over the public address to prove clients
+will see it.
+
+</details>
+
+---
+
 ## Skins
 
 <img src="docs/media/skins.png" alt="Nord, Olympus and Ember">
@@ -216,6 +266,7 @@ Drop more in `~/.config/prismstudio/themes/`, pick one in **Settings → Look**.
 | `Ctrl+W` · `Ctrl+Tab` | close file · next file |
 | `Ctrl+F` · `Ctrl+H` · `Ctrl+G` | find · replace · go to line |
 | `Ctrl+Shift+F` | search the workspace |
+| `Ctrl+Shift+G` | source control |
 | `Ctrl+Shift+P` | command palette |
 | `Ctrl+B` · `Ctrl+J` · `Ctrl+Shift+C` | side bar · panel · Claude |
 | `Ctrl+Shift+B` · `Shift+F5` · `Ctrl+Shift+L` | run · stop · open in browser |
@@ -245,6 +296,7 @@ your comments and ordering.
 | `SIDEBAR` `PANEL` `ASSISTANT` + sizes | layout |
 | `RESTORE_SESSION` `CONFIRM_CLOSE` | on open and close |
 | `CLAUDE_CMD` `SHELL` `EXTENSIONS` | what it runs |
+| `UPDATE_CHECK` `UPDATE_URL` `UPDATE_INTERVAL` | looking for new versions |
 
 ---
 
@@ -256,9 +308,11 @@ python3 tests/test_assist.py      # suggestions, ghost text, Claude's edits
 python3 tests/test_extensions.py  # loading, isolation of a broken one, the palette
 python3 tests/test_project.py     # what each kind of folder is detected as
 python3 tests/test_runbar.py      # install, run, find the address, stop
+python3 tests/test_lsp.py         # language servers: diagnostics, completion
+python3 tests/test_updates.py     # version compare, the throttle, staying quiet
 ```
 
-**283 checks.** They assert on the widget tree and on real behaviour rather
+**357 checks.** They assert on the widget tree and on real behaviour rather
 than on pixels. `test_runbar.py` genuinely starts a server, fetches from it and
 checks the port closes afterwards, because every interesting bug in that path
 was a timing or integration bug a mock would have hidden.
@@ -279,6 +333,7 @@ if it somehow ran zero checks.
 | tree, search, panel, Claude | `app/explorer.py` · `app/search.py` · `app/panel.py` · `app/assistant.py` |
 | detecting and running a project | `app/project.py` · `app/runbar.py` · `app/runner.py` |
 | extensions and the palette | `app/extensions.py` · `app/palette.py` |
+| language servers, git, updates | `app/lsp.py` · `app/gitrepo.py` · `app/updates.py` |
 | skins | `themes/` |
 | settings · shortcuts · extensions | `~/.config/prismstudio/` |
 | session and recent folders | `~/.cache/prismstudio/state.json` |
