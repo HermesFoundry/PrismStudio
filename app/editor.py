@@ -14,7 +14,6 @@ from gi.repository import Gdk, Gio, GLib, GtkSource, Gtk, Pango  # noqa: E402
 
 import assist  # noqa: E402
 import core  # noqa: E402
-import core  # noqa: E402
 import inline  # noqa: E402
 import lsp  # noqa: E402
 import sourcestyle  # noqa: E402
@@ -403,6 +402,11 @@ class Editor(Gtk.Box):
         title.set_markup("<span size='xx-large' weight='bold'>PrismStudio</span>")
         title.get_style_context().add_class("welcometitle")
         box.pack_start(title, False, False, 0)
+
+        invite = Gtk.Label(label="double-click anywhere to start writing")
+        invite.get_style_context().add_class("welcomeinvite")
+        box.pack_start(invite, False, False, 4)
+
         for keys, what in (("Ctrl+K", "open a folder"), ("Ctrl+O", "open a file"),
                            ("Ctrl+N", "new file"), ("Ctrl+Shift+P", "command palette"),
                            ("Ctrl+Shift+F", "search the workspace"),
@@ -413,7 +417,27 @@ class Editor(Gtk.Box):
             row.set_xalign(0.0)
             row.get_style_context().add_class("welcomerow")
             box.pack_start(row, False, False, 0)
-        return box
+
+        # A Gtk.Box has no window of its own and never sees a click, so the
+        # whole welcome sits in an event box. It fills the stack rather than
+        # hugging the text, so double-clicking the empty space works too —
+        # which is where people actually click.
+        catcher = Gtk.EventBox()
+        catcher.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
+        catcher.set_above_child(False)
+        catcher.add(box)
+        catcher.connect("button-press-event", self._welcome_clicked)
+        catcher.connect("realize", lambda w: w.get_window().set_cursor(
+            Gdk.Cursor.new_from_name(w.get_display(), "text")))
+        self.welcome_box = box
+        return catcher
+
+    def _welcome_clicked(self, _widget, event):
+        """Double-click the empty state to get straight into a new file."""
+        if event.type == Gdk.EventType._2BUTTON_PRESS and event.button == 1:
+            self.new_file()
+            return True
+        return False
 
     def _show_welcome(self):
         self.welcome.show_all()

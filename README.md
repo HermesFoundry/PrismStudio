@@ -10,7 +10,7 @@ GTK3, Python, native. No Electron, no browser, no telemetry.
 <img src="https://img.shields.io/badge/GTK-3-4fb3ff?style=flat-square" alt="GTK 3">
 <img src="https://img.shields.io/badge/Python-3.10%2B-3ddc97?style=flat-square" alt="Python 3.10+">
 <img src="https://img.shields.io/badge/Linux-desktop%20app-f0a848?style=flat-square" alt="Linux desktop app">
-<img src="https://img.shields.io/badge/tests-410%20checks-b48ead?style=flat-square" alt="410 checks">
+<img src="https://img.shields.io/badge/tests-425%20checks-b48ead?style=flat-square" alt="425 checks">
 <img src="https://img.shields.io/badge/version-1.0.0-8fbcbb?style=flat-square" alt="version 1.0.0">
 <img src="https://img.shields.io/badge/licence-MIT-88c0d0?style=flat-square" alt="MIT licence">
 
@@ -88,14 +88,20 @@ panel lives underneath, Claude down the right, and a status bar along the
 bottom. `Ctrl+B` hides the side bar, `Ctrl+J` the panel, `Ctrl+Shift+C` Claude.
 Every divider drags.
 
-**It opens empty.** Nothing on the machine is listed until you open a folder —
-before that the panel offers Open folder, Open file and your recent folders,
-and nothing else.
+**It opens empty.** A bare `prism` lists nothing on your machine — not even
+the folder you had last time. The panel offers Open folder, Open file, Clone a
+repository and your recent folders, and nothing else. Set `REOPEN_LAST=1` if
+you would rather it picked up where you left off.
 
-**It remembers.** Close it with four files open and it comes back with those
-four files open, cursors where you left them, in the folder you were in.
+**Double-click the middle to start writing.** The empty state is a button: it
+gives you an untitled document with the cursor already in it. `Ctrl+N` does
+the same.
 
-<img src="docs/media/welcome.png" width="620" alt="The empty state">
+**It remembers within a folder.** Open one you have used before and the files
+you had open come back, cursors where you left them. That is `RESTORE_SESSION`,
+and it is separate from reopening the folder itself.
+
+<img src="docs/media/welcome.png" alt="The empty state: nothing listed, double-click to write">
 
 ---
 
@@ -402,7 +408,7 @@ your comments and ordering.
 | `AUTOSAVE` `FLUSH_FOR_CLAUDE` `TRIM_ON_SAVE` | saving |
 | `SIDEBAR` `PANEL` `ASSISTANT` + sizes | layout |
 | `GIT_PROTOCOL` `COPILOT_CMD` | GitHub and Copilot |
-| `RESTORE_SESSION` `CONFIRM_CLOSE` | on open and close |
+| `RESTORE_SESSION` `REOPEN_LAST` `CONFIRM_CLOSE` | on open and close |
 | `CLAUDE_CMD` `SHELL` `EXTENSIONS` | what it runs |
 | `UPDATE_CHECK` `UPDATE_URL` `UPDATE_INTERVAL` | looking for new versions |
 
@@ -422,7 +428,7 @@ python3 tests/test_github.py      # clone for real, publish, never touch a token
 python3 tests/test_copilot.py     # the Copilot handshake, against the real server
 ```
 
-**410 checks.** They assert on the widget tree and on real behaviour rather
+**425 checks.** They assert on the widget tree and on real behaviour rather
 than on pixels. `test_runbar.py` genuinely starts a server, fetches from it and
 checks the port closes afterwards, because every interesting bug in that path
 was a timing or integration bug a mock would have hidden.

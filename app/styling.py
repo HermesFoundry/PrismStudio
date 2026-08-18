@@ -318,6 +318,7 @@ paned > separator:hover {{ background: {accent}; }}
 .welcomesub {{ color: {dim}; }}
 .welcomerow {{ color: {dim}; font-size: 12px; }}
 .welcomekey {{ color: {fg}; font-family: monospace; }}
+.welcomeinvite {{ color: {accent}; font-size: 12px; }}
 
 /* ---- preferences ------------------------------------------------------- */
 .prefs {{ background: {bg}; color: {fg}; }}

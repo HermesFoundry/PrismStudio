@@ -212,7 +212,18 @@ class PrefsDialog(Gtk.Dialog):
         self._heading(column, "Files")
         self._row(column, "Save constantly while typing", self._switch("AUTOSAVE", "0"))
         self._row(column, "Trim trailing space on save", self._switch("TRIM_ON_SAVE", "0"))
-        self._row(column, "Reopen last session", self._switch("RESTORE_SESSION", "1"))
+        self._row(column, "Remember files within a folder",
+                  self._switch("RESTORE_SESSION", "1"))
+        self._row(column, "Reopen last folder on start",
+                  self._switch("REOPEN_LAST", "0"))
+        note = Gtk.Label()
+        note.set_markup("<small>Off, PrismStudio starts empty and lists nothing "
+                        "on your machine until you open something. On, a bare "
+                        "<tt>prism</tt> reopens the folder you had last.</small>")
+        note.set_line_wrap(True)
+        note.set_xalign(0.0)
+        note.get_style_context().add_class("hint")
+        column.pack_start(note, False, False, 0)
         self._row(column, "Ask before closing unsaved work",
                   self._switch("CONFIRM_CLOSE", "1"))
         return scroll

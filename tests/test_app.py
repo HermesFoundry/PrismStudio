@@ -45,9 +45,10 @@ _ensure_display()
 
 import gi  # noqa: E402
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
 gi.require_version("Vte", "2.91")
 gi.require_version("GtkSource", "4")
-from gi.repository import GLib, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 import core  # noqa: E402
 import workspace  # noqa: E402
@@ -182,10 +183,19 @@ def start():
             check("a selection popup", win.selection is not None)
             check("the editor's status widgets live in it",
                   win.editor.pos_label.get_parent() is win.status)
-            # workspace_checks() above left a remembered session, and the app
-            # restores it on start, so it should already be in that folder
-            print("\n-- it reopened where it left off --")
-            check("the last folder came back", win.root, PROJECT)
+            # workspace_checks() above left a remembered session. A bare
+            # launch must NOT bring it back: nothing on the machine is listed
+            # until it is asked for.
+            print("\n-- a bare launch lists nothing --")
+            check("no folder is reopened", win.root, None)
+            check("the title is just the app", win.get_title(), core.APP_NAME)
+            check("REOPEN_LAST is off unless asked for",
+                  core.DEFAULTS["REOPEN_LAST"], "0")
+
+            print("\n-- until you open one --")
+            win.open_folder(PROJECT)
+            pump()
+            check("opening it explicitly works", win.root, PROJECT)
             check("and the title says so", win.get_title(), "demo — PrismStudio")
             win.close_folder()
             pump()
@@ -410,6 +420,70 @@ def start():
         GLib.timeout_add(200, phase5)
         return False
 
+    def phase_welcome():
+        """The empty state: it lists nothing, and double-clicking it writes.
+
+        Both halves matter. A bare `prism` must not quietly reopen whatever
+        folder you had last, because that puts your files on screen without
+        being asked; and the empty state is the obvious place to click when
+        you just want to start typing, so it has to do something.
+        """
+        try:
+            win.close_folder()
+            pump()
+            check("closing the folder leaves nothing open", win.root, None)
+            while win.editor.docs:
+                win.editor.docs[0].buffer.set_modified(False)
+                win.editor.close_doc(win.editor.docs[0])
+            pump()
+            check("and no documents", len(win.editor.docs), 0)
+            check("the welcome screen is what you see",
+                  win.editor.stack.get_visible_child_name(), "welcome")
+            check("which is an event box, so it can be clicked",
+                  isinstance(win.editor.welcome, Gtk.EventBox), True)
+
+            double = Gdk.EventButton()
+            double.type = Gdk.EventType._2BUTTON_PRESS
+            double.button = 1
+            check("a double-click is taken",
+                  win.editor._welcome_clicked(win.editor.welcome, double), True)
+            check("it opens exactly one document", len(win.editor.docs), 1)
+            check("untitled", win.editor.docs[0].path, None)
+            check("the editor is in front",
+                  win.editor.stack.get_visible_child_name(), "editing")
+            check("it is editable", win.editor.view.get_editable(), True)
+            buffer = win.editor.docs[0].buffer
+            buffer.insert_at_cursor("typed straight in")
+            check("and typing lands in it",
+                  buffer.get_text(buffer.get_start_iter(),
+                                  buffer.get_end_iter(), True),
+                  "typed straight in")
+
+            single = Gdk.EventButton()
+            single.type = Gdk.EventType.BUTTON_PRESS
+            single.button = 1
+            before = len(win.editor.docs)
+            win.editor._welcome_clicked(win.editor.welcome, single)
+            check("a single click does not open anything",
+                  len(win.editor.docs), before)
+
+            check("REOPEN_LAST is off unless asked for",
+                  core.DEFAULTS["REOPEN_LAST"], "0")
+
+            # Leave the window as this phase found it, or the next one is
+            # testing this phase's leftovers rather than its own subject.
+            for doc in list(win.editor.docs):
+                doc.buffer.set_modified(False)
+                win.editor.close_doc(doc)
+            pump()
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            fails.append("exception in the welcome phase")
+        finally:
+            app.quit()
+        return False
+
     def phase5():
         try:
             pump()
@@ -433,7 +507,7 @@ def start():
             traceback.print_exc()
             fails.append("exception in phase 5")
         finally:
-            app.quit()
+            GLib.timeout_add(200, phase_welcome)
         return False
 
     GLib.timeout_add(2200, phase1)

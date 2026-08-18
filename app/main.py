@@ -1188,8 +1188,11 @@ class PrismApp(Gtk.Application):
                 files.append(full)
                 folder = folder or os.path.dirname(full)
         if folder is None and not files:
+            # Started with no arguments. By default that means an empty
+            # window: nothing on the machine is listed until you ask for it.
+            # REOPEN_LAST=1 brings back the folder you had last time instead.
             cfg = core.load_settings()
-            if cfg.get("RESTORE_SESSION", "1") == "1":
+            if cfg.get("REOPEN_LAST", "0") == "1":
                 folder = workspace.last_folder()
         window = PrismWindow(self, folder)
         for path in files:

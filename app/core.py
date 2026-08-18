@@ -56,7 +56,8 @@ DEFAULTS = {
     "AUTOSAVE": "0",
     "FLUSH_FOR_CLAUDE": "1",
     "TRIM_ON_SAVE": "0",
-    "RESTORE_SESSION": "1",
+    "RESTORE_SESSION": "1",      # reopen the files you had, when you open a folder
+    "REOPEN_LAST": "0",          # on a bare `prism`, reopen last time's folder
 
     # the assistant
     "CLAUDE": "1",              # master switch: 0 removes every Claude feature
