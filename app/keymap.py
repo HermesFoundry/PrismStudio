@@ -44,6 +44,7 @@ ACTIONS = [
 
     ("side-explorer",   "Explorer",                 "View",   "Ctrl+Shift+E",      "Ctrl+Shift+E"),
     ("side-search",     "Search panel",             "View",   "Ctrl+Alt+F",        "Ctrl+Alt+F"),
+    ("side-git",        "Source control",           "View",   "Ctrl+Shift+G",      "Ctrl+Shift+G"),
     ("side-run",        "Run panel",                "View",   "Ctrl+Shift+D",      "Ctrl+Shift+D"),
     ("side-extensions", "Extensions panel",         "View",   "Ctrl+Shift+X",      "Ctrl+Shift+X"),
     ("toggle-sidebar",  "Show or hide the side bar", "View",  "Ctrl+B",            "Ctrl+Shift+B"),
@@ -56,6 +57,9 @@ ACTIONS = [
     ("zoom-reset",      "Reset text size",          "View",   "Ctrl+0",            "Ctrl+0"),
     ("fullscreen",      "Full screen",              "View",   "F11",               "F11"),
 
+    ("git-commit",      "Commit",                   "Git",    "Ctrl+Return",       "Ctrl+Return"),
+    ("git-sync",        "Sync with the remote",     "Git",    "",                  ""),
+    ("git-refresh",     "Refresh source control",   "Git",    "",                  ""),
     ("run-app",         "Run the app",              "Run",    "Ctrl+Shift+B",      "Ctrl+Alt+B"),
     ("stop-app",        "Stop it",                  "Run",    "Shift+F5",          "Shift+F5"),
     ("open-app",        "Open it in the browser",   "Run",    "Ctrl+Shift+L",      "Ctrl+Shift+L"),
@@ -75,7 +79,7 @@ ACTIONS = [
     ("quit",            "Quit",                     "App",    "Ctrl+Q",            "Ctrl+Shift+Q"),
 ]
 
-GROUPS = ["File", "Edit", "View", "Run", "Claude", "App"]
+GROUPS = ["File", "Edit", "View", "Git", "Run", "Claude", "App"]
 
 # Control characters the standard preset takes over. The terminal panel is not
 # the main event here, so only the few that would be genuinely missed are

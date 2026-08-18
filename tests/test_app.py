@@ -170,13 +170,15 @@ def start():
         try:
             pump()
             print("\n-- the window is put together --")
-            check("there is an activity bar", len(win.activity_buttons), 4)
+            check("there is an activity bar", len(win.activity_buttons), 5)
             check("a side bar", win.sidebar is not None)
             check("an editor", win.editor is not None)
             check("a bottom panel", win.panel is not None)
             check("a Claude pane", win.assistant is not None)
             check("a run bar", win.runbar is not None)
             check("and a status bar", win.status is not None)
+            check("a source control panel", win.git is not None)
+            check("a selection popup", win.selection is not None)
             check("the editor's status widgets live in it",
                   win.editor.pos_label.get_parent() is win.status)
             # workspace_checks() above left a remembered session, and the app
@@ -234,11 +236,12 @@ def start():
             check("and it switched rather than opening twice", len(win.editor.docs), 2)
 
             print("\n-- the activity bar switches the side bar --")
-            for name in ("search", "run", "extensions", "explorer"):
+            for name in ("search", "git", "run", "extensions", "explorer"):
                 win._side(name)
                 pump(60)
                 check("%s shows" % name, win.side_stack.get_visible_child_name(), name)
-                check("  and is titled", win.side_title.get_text(), name.upper())
+                check("  and is titled", win.side_title.get_text(),
+                      "SOURCE CONTROL" if name == "git" else name.upper())
 
             print("\n-- the panel holds several terminals --")
             win.toggle_panel(True)

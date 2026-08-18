@@ -446,6 +446,36 @@ class Editor(Gtk.Box):
             return manager.get_language("python3") or lang
         return lang
 
+    def open_virtual(self, title, text, language=None):
+        """Show generated text (a diff, a log) as a read-only tab.
+
+        It is a Document like any other so it gets the skin's syntax colours,
+        the find bar and go-to-line, but it has no path, cannot be saved, and
+        is replaced rather than duplicated if you open the same view twice.
+        """
+        key = "view:" + title
+        for doc in self.docs:
+            if doc.key == key:
+                doc.buffer.begin_not_undoable_action()
+                doc.buffer.set_text(text)
+                doc.buffer.end_not_undoable_action()
+                doc.buffer.set_modified(False)
+                self.switch(doc)
+                return doc
+        doc = Document(None)
+        doc.key, doc.name, doc.virtual = key, title, True
+        doc.buffer.begin_not_undoable_action()
+        doc.buffer.set_text(text)
+        doc.buffer.end_not_undoable_action()
+        doc.buffer.set_modified(False)
+        if language:
+            doc.buffer.set_language(
+                GtkSource.LanguageManager.get_default().get_language(language))
+        doc.buffer.set_style_scheme(self._scheme)
+        self._add(doc, True)
+        self.view.set_editable(False)
+        return doc
+
     def new_file(self):
         doc = Document(None)
         doc.buffer.set_style_scheme(self._scheme)
@@ -494,6 +524,7 @@ class Editor(Gtk.Box):
         self.status_message("%s changed on disk and was reloaded" % os.path.basename(doc.path))
 
     def switch(self, doc, focus=True):
+        self.view.set_editable(not getattr(doc, "virtual", False))
         self.ghost.clear()
         self._drop_timers()
         self.current = doc
@@ -548,6 +579,9 @@ class Editor(Gtk.Box):
     def save(self, ask=False, quiet=False):
         doc = self.current
         if doc is None:
+            return False
+        if getattr(doc, "virtual", False):
+            self.status_message("this is a generated view, there is nothing to save")
             return False
         path = doc.path if (doc.path and not ask) else self._ask_where(doc)
         if not path:
