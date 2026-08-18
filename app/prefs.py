@@ -33,6 +33,7 @@ class PrefsDialog(Gtk.Dialog):
         book.append_page(self._assistant_page(), Gtk.Label(label="Claude"))
         book.append_page(self._extensions_page(), Gtk.Label(label="Extensions"))
         book.append_page(self._keys_page(), Gtk.Label(label="Keys"))
+        book.append_page(self._updates_page(), Gtk.Label(label="Updates"))
         area = self.get_content_area()
         area.set_spacing(0)
         area.pack_start(book, True, True, 0)
@@ -111,6 +112,13 @@ class PrefsDialog(Gtk.Dialog):
             editor.view.set_indent_width(int(value))
         elif key == "SPACES":
             editor.view.set_insert_spaces_instead_of_tabs(value == "1")
+        elif key == "UPDATE_URL":
+            # a new address means the old server's answer no longer applies
+            import updates as updates_module
+            state = updates_module.read_state()
+            state.pop("latest", None)
+            state.pop("last_check", None)
+            updates_module.write_state(state)
         elif key == "RIGHT_MARGIN":
             editor.view.set_show_right_margin(int(value) > 0)
             if int(value) > 0:
@@ -252,6 +260,62 @@ class PrefsDialog(Gtk.Dialog):
         self._row(column, "Save before Claude reads a file",
                   self._switch("FLUSH_FOR_CLAUDE", "1"))
         return scroll
+
+    # -- updates ---------------------------------------------------------------
+    def _updates_page(self):
+        scroll, column = self._page()
+        self._heading(column, "Updates",
+                      "PrismStudio asks one address whether there is a newer "
+                      "version and shows you what changed. It never installs "
+                      "anything on its own.")
+
+        version = Gtk.Label(label="PrismStudio %s" % core.VERSION)
+        version.set_xalign(0.0)
+        self._row(column, "You are running", version)
+        self._row(column, "Check when the app starts", self._switch("UPDATE_CHECK", "1"))
+
+        hours = Gtk.SpinButton.new_with_range(1, 336, 1)
+        hours.set_value(float(self.win.cfg.get("UPDATE_INTERVAL", "20") or 20))
+        hours.connect("value-changed",
+                      lambda s: self._set("UPDATE_INTERVAL", int(s.get_value())))
+        self._row(column, "Hours between checks", hours)
+
+        address = Gtk.Entry()
+        address.set_text(self.win.cfg.get("UPDATE_URL", core.DEFAULTS["UPDATE_URL"]))
+        address.set_width_chars(34)
+        address.connect("changed", lambda e: self._set("UPDATE_URL", e.get_text()))
+        self._row(column, "Where to check", address)
+
+        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        now = Gtk.Button(label="Check now")
+        now.connect("clicked", lambda *_: self.win.updates.check(manual=True))
+        buttons.pack_start(now, False, False, 0)
+        again = Gtk.Button(label="Un-skip versions")
+        again.set_tooltip_text("Show the card again for a version you skipped")
+        again.connect("clicked", self._unskip)
+        buttons.pack_start(again, False, False, 0)
+        column.pack_start(buttons, False, False, 4)
+
+        note = Gtk.Label()
+        note.set_markup(
+            "<small>The request is a plain GET carrying "
+            "<tt>User-Agent: PrismStudio/%s</tt> and nothing else: no identifier, "
+            "no machine details, nothing about what you have open. Turned off, it "
+            "never opens a socket. The only things kept on disk are the time of "
+            "the last check and the version you last skipped, in "
+            "<tt>~/.cache/prismstudio/updates.json</tt>.</small>" % core.VERSION)
+        note.set_line_wrap(True)
+        note.set_xalign(0.0)
+        note.get_style_context().add_class("hint")
+        column.pack_start(note, False, False, 0)
+        return scroll
+
+    def _unskip(self, *_):
+        import updates as updates_module
+        state = updates_module.read_state()
+        state.pop("dismissed", None)
+        updates_module.write_state(state)
+        self.win.updates.check(manual=True)
 
     # -- extensions ------------------------------------------------------------
     def _extensions_page(self):
