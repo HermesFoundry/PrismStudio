@@ -66,6 +66,9 @@ DEFAULTS = {
     "SELECTION_BAR": "1",       # the little popup when you highlight something
     "SHELL": os.environ.get("SHELL", "/bin/bash"),
 
+    # github
+    "GIT_PROTOCOL": "ssh",      # ssh | https, for clone URLs and gh sign-in
+
     # updates
     "UPDATE_CHECK": "1",        # look for a new version when the app starts
     "UPDATE_URL": "https://hermesarcade.co.za/prismstudio/updates.json",

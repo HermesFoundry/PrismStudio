@@ -21,12 +21,14 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("Vte", "2.91")
 gi.require_version("GtkSource", "4")
-from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Gdk, Gio, GLib, Gtk, Vte  # noqa: E402
 
 import core  # noqa: E402
 import extensions  # noqa: E402
 import keymap  # noqa: E402
 import lsp  # noqa: E402
+import copilot  # noqa: E402
+import github  # noqa: E402
 import styling  # noqa: E402
 import updates  # noqa: E402
 import workspace  # noqa: E402
@@ -119,6 +121,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.sidebar.pack_start(self.side_stack, True, True, 0)
 
         # ---- editor and panel ------------------------------------------------
+        self.copilot = copilot.Client(self)
         self.lsp = lsp.Client(None, on_diagnostics=self._diagnostics,
                               on_log=lambda text: self.panel.write(text)
                               if getattr(self, "panel", None) else None)
@@ -243,6 +246,8 @@ class PrismWindow(Gtk.ApplicationWindow):
                       ("Bigger text", "zoom-in"), ("Smaller text", "zoom-out"),
                       ("Reset text size", "zoom-reset"), ("Full screen", "fullscreen")])
         menu("Git", [("Commit", "git-commit"), ("Sync", "git-sync"), None,
+                     ("Clone a repository…", "git-clone"),
+                     ("Publish to GitHub…", "git-publish"), None,
                      ("Refresh", "git-refresh")])
         menu("Run", [("Run the app", "run-app"), ("Stop", "stop-app"),
                      ("Open in the browser", "open-app"), None,
@@ -750,6 +755,8 @@ class PrismWindow(Gtk.ApplicationWindow):
             "keymap": self.show_keymap,
             "about": self.show_about,
             "check-updates": self.check_updates,
+            "git-clone": self.show_clone,
+            "git-publish": self.show_publish,
             "quit": self.quit_app,
             "fullscreen": self.toggle_fullscreen,
             "zoom-in": lambda: self.zoom(1),
@@ -873,6 +880,185 @@ class PrismWindow(Gtk.ApplicationWindow):
         dialog.destroy()
         return True
 
+    # ---------------------------------------------------------------------- #
+    # github
+    # ---------------------------------------------------------------------- #
+    def run_in_panel(self, command, cwd=None):
+        """Show the panel and run something in it, where it can be watched."""
+        self.toggle_panel(True)
+        return self.panel.run(command, cwd=cwd or self.root)
+
+    def show_clone(self):
+        import clone
+        clone.CloneDialog(self).show_all()
+        return True
+
+    def show_publish(self):
+        import clone
+        if not self.root:
+            self.say("open the folder you want to publish first", bad=True)
+            return True
+        clone.PublishDialog(self).show_all()
+        return True
+
+    def clone_into(self, url, target):
+        """git clone, in the terminal, then offer to open what arrived.
+
+        The clone runs where you can see it because a big repository takes a
+        while and a silent spinner tells you nothing. Finishing is detected by
+        a marker echoed after it, rather than by guessing from the clock.
+        """
+        marker = "PRISM_CLONE_DONE"
+        parent = os.path.dirname(target)
+        self.say("cloning into %s" % target)
+        self.run_in_panel("git clone %s %s && echo %s"
+                          % (GLib.shell_quote(url), GLib.shell_quote(target), marker),
+                          cwd=parent)
+        self._await_clone(target, marker, tries=[0])
+
+    def _await_clone(self, target, marker, tries):
+        def look():
+            tries[0] += 1
+            done = os.path.isdir(os.path.join(target, ".git")) and \
+                marker in self._panel_text()
+            if done:
+                self._clone_arrived(target)
+                return False
+            if tries[0] > 600:                 # ten minutes is long enough
+                return False
+            return True
+        GLib.timeout_add_seconds(1, look)
+
+    def _panel_text(self):
+        """Whatever the visible terminal is showing. Empty on any trouble."""
+        terminal = self.panel.current_terminal()
+        if terminal is None:
+            return ""
+        for attempt in (
+                lambda: terminal.term.get_text_format(Vte.Format.TEXT),):
+            try:
+                got = attempt()
+            except Exception:
+                continue
+            while isinstance(got, tuple) and got:
+                got = got[0]
+            if isinstance(got, str):
+                return got
+        return ""
+
+    def _clone_arrived(self, target):
+        dialog = Gtk.MessageDialog(transient_for=self, modal=True,
+                                   message_type=Gtk.MessageType.QUESTION,
+                                   buttons=Gtk.ButtonsType.YES_NO,
+                                   text="Cloned %s" % os.path.basename(target))
+        dialog.format_secondary_text("Open it now?")
+        dialog.get_style_context().add_class("prefs")
+        answer = dialog.run()
+        dialog.destroy()
+        if answer == Gtk.ResponseType.YES:
+            self.open_folder(target)
+        else:
+            self.say("cloned into %s" % target)
+
+    def publish_folder(self, name, private, description):
+        """gh repo create, from the open folder, pushing what is committed."""
+        if not github.available():
+            self.say("publishing needs the GitHub CLI (gh)", bad=True)
+            return
+        if not self.git.repo.is_repo():
+            self.say("this folder is not a git repository yet", bad=True)
+            return
+        self.say("publishing %s" % name)
+        self.run_in_panel(github.create_argv(name, private, description,
+                                             self.root, push=True))
+        GLib.timeout_add_seconds(8, lambda: (self.git.refresh(), False)[1])
+
+    def copilot_status_changed(self, kind, message):
+        """The Copilot server volunteers its state; pass on the useful ones."""
+        if kind in ("signed-out", "no-subscription", "error"):
+            self.say("Copilot: " + (message or kind), bad=True)
+        elif kind == "ready" and self.editor.suggest_mode == "copilot":
+            self.say("Copilot is ready")
+        return False
+
+    def copilot_sign_in(self):
+        """Device flow: show the code, open the page, wait for the server."""
+        server = self.copilot.ensure()
+        if server is None:
+            kind, message = self.copilot.status()
+            self.say("Copilot: " + (message or kind), bad=True)
+            return True
+
+        def coded(code, url, error):
+            if error:
+                self.say("Copilot sign-in failed: " + error, bad=True)
+                return
+            if not code:
+                self.say("already signed in to Copilot")
+                return
+            self._show_device_code(code, url)
+        server.sign_in(coded)
+        self.say("asking Copilot to start a sign-in…")
+        return True
+
+    def _show_device_code(self, code, url):
+        dialog = Gtk.Dialog(title="Sign in to Copilot", transient_for=self,
+                            modal=False)
+        dialog.get_style_context().add_class("prefs")
+        dialog.get_style_context().add_class("whatsnew")
+        area = dialog.get_content_area()
+        area.set_border_width(20)
+        area.set_spacing(12)
+
+        lead = Gtk.Label(xalign=0)
+        lead.set_markup("Enter this code at <b>%s</b>:"
+                        % GLib.markup_escape_text(url))
+        lead.set_line_wrap(True)
+        area.pack_start(lead, False, False, 0)
+
+        shown = Gtk.Label(label=code)
+        shown.get_style_context().add_class("devicecode")
+        shown.set_selectable(True)
+        area.pack_start(shown, False, False, 0)
+
+        note = Gtk.Label(xalign=0)
+        note.set_markup("<small>The code is on the clipboard. This window can "
+                        "be closed once GitHub says you are done — the editor "
+                        "notices on its own.</small>")
+        note.set_line_wrap(True)
+        note.get_style_context().add_class("hint")
+        area.pack_start(note, False, False, 0)
+
+        Gtk.Clipboard.get_default(Gdk.Display.get_default()).set_text(code, -1)
+        dialog.add_button("Copy again", 1)
+        dialog.add_button("Open the page", 2)
+        dialog.add_button("Done", Gtk.ResponseType.CLOSE)
+        dialog.get_action_area().get_style_context().add_class("wnactions")
+        for button in dialog.get_action_area().get_children():
+            button.get_style_context().add_class("wnbtn")
+        dialog.get_action_area().get_children()[-1] \
+            .get_style_context().add_class("wnprimary")
+
+        def respond(_d, response):
+            if response == 1:
+                Gtk.Clipboard.get_default(Gdk.Display.get_default()).set_text(code, -1)
+                self.say("code copied")
+            elif response == 2:
+                Gtk.show_uri_on_window(self, url, 0)
+            else:
+                dialog.destroy()
+        dialog.connect("response", respond)
+        dialog.show_all()
+
+    def copilot_sign_out(self):
+        if self.copilot.server is None:
+            self.say("Copilot is not running")
+            return True
+        self.copilot.server.sign_out(
+            lambda error: self.say("signed out of Copilot" if not error
+                                   else str(error), bad=bool(error)))
+        return True
+
     def check_updates(self):
         """Help -> Check for updates. Says so either way, unlike the quiet
         check at startup."""
@@ -921,6 +1107,7 @@ class PrismWindow(Gtk.ApplicationWindow):
                 return True
         self._save_session()
         self.updates.stop()
+        self.copilot.shutdown()
         self.lsp.shutdown()
         core.save_settings({"SIDEBAR": self.cfg.get("SIDEBAR", "explorer"),
                             "PANEL": self.cfg.get("PANEL", "0"),

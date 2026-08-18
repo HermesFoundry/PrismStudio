@@ -117,6 +117,9 @@ class SourceControl(Gtk.Box):
             self.sync_btn.set_label(" ".join(bits) if bits else "Sync")
             self.sync_btn.set_tooltip_text("Pull then push, against %s" % upstream)
 
+        if not self.repo.remotes():
+            self._offer_publish()
+
         changes = self.repo.status()
         staged = [c for c in changes if c.staged]
         unstaged = [c for c in changes if c.unstaged and not c.untracked]
@@ -141,6 +144,23 @@ class SourceControl(Gtk.Box):
         self._history()
         self.body.show_all()
 
+    def _offer_publish(self):
+        """A repository with no remote at all has nowhere to push to. The
+        Publish on the sync button means "push this branch"; this means "put
+        this repository somewhere"."""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.set_margin_bottom(8)
+        label = Gtk.Label(label="No remote. Nothing here is anywhere else yet.")
+        label.set_xalign(0.0)
+        label.set_line_wrap(True)
+        label.get_style_context().add_class("sideempty")
+        box.pack_start(label, False, False, 0)
+        button = Gtk.Button(label="Publish to GitHub…")
+        button.get_style_context().add_class("sidebtn")
+        button.connect("clicked", lambda *_: self.window.show_publish())
+        box.pack_start(button, False, False, 0)
+        self.body.pack_start(box, False, False, 0)
+
     def _empty(self, text):
         label = Gtk.Label(label=text)
         label.set_xalign(0.0)
@@ -158,11 +178,14 @@ class SourceControl(Gtk.Box):
         label.set_xalign(0.0)
         label.set_line_wrap(True)
         label.get_style_context().add_class("sideempty")
-        button = Gtk.Button(label="Initialise a repository here")
-        button.get_style_context().add_class("sidebtn")
-        button.connect("clicked", lambda *_: self._init())
         box.pack_start(label, False, False, 0)
-        box.pack_start(button, False, False, 0)
+        for text, handler in (
+                ("Initialise a repository here", lambda *_: self._init()),
+                ("Clone a repository…", lambda *_: self.window.show_clone())):
+            button = Gtk.Button(label=text)
+            button.get_style_context().add_class("sidebtn")
+            button.connect("clicked", handler)
+            box.pack_start(button, False, False, 0)
         self.body.pack_start(box, False, False, 0)
         self.branch_btn.set_label("—")
         self.sync_btn.set_label("")

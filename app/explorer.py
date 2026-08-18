@@ -131,7 +131,8 @@ class Explorer(Gtk.Box):
         box.pack_start(why, False, False, 0)
 
         for label, action in (("Open folder…", self.pick_folder),
-                              ("Open file…", self.pick_file)):
+                              ("Open file…", self.pick_file),
+                              ("Clone a repository…", self.window.show_clone)):
             button = Gtk.Button(label=label)
             button.get_style_context().add_class("sidebtn")
             button.connect("clicked", lambda _b, fn=action: fn())
