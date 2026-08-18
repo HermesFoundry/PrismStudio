@@ -233,6 +233,48 @@ paned > separator:hover {{ background: {accent}; }}
 .statusbad {{ color: {urgent}; font-size: 11px; }}
 .statusgood {{ color: {ok}; font-size: 11px; }}
 
+/* ---- source control ----------------------------------------------------- */
+.gitbranch {{
+    background: {raised}; color: {fg}; border: 1px solid {border};
+    border-radius: 7px; padding: 3px 10px; font-size: 12px;
+}}
+.gitbranch:hover {{ border-color: {accent}; }}
+.gitsync {{
+    background: {accent}; color: {on_accent}; border: none;
+    border-radius: 7px; padding: 3px 10px; font-size: 12px; font-weight: 600;
+}}
+.gitsync:hover {{ background: {mix(accent, fg, 0.18)}; }}
+.gitsync:disabled {{ background: {mix(panel, fg, 0.14)}; color: {dim}; }}
+.gitmessage, .gitmessage text {{
+    background: {sunken}; color: {fg}; padding: 6px 8px;
+}}
+.gitcommit {{
+    background: {ok}; color: {readable_on(ok)}; border: none;
+    border-radius: 7px; padding: 5px 12px; font-weight: 700;
+}}
+.gitcommit:hover {{ background: {mix(ok, fg, 0.18)}; }}
+.gitcommit:disabled {{ background: {mix(panel, fg, 0.12)}; color: {dim}; }}
+.gitrow {{ padding: 2px 2px 2px 4px; border-radius: 5px; }}
+.gitrow:hover {{ background: {mix(panel, fg, 0.09)}; }}
+.gitname {{ color: {fg}; font-size: 12px; }}
+.gitfolder {{ color: {dim}; font-size: 11px; }}
+.gitmod {{ color: {accent2}; font-weight: 700; font-family: monospace; }}
+.gitadd {{ color: {ok}; font-weight: 700; font-family: monospace; }}
+.gitdel {{ color: {urgent}; font-weight: 700; font-family: monospace; }}
+.gitnew {{ color: {ok}; font-weight: 700; font-family: monospace; }}
+.gitconflict {{ color: {urgent}; font-weight: 700; font-family: monospace; }}
+
+/* ---- the selection popup ----------------------------------------------- */
+.selbar, .selbar > contents {{
+    background: {raised}; border: 1px solid {border}; border-radius: 9px;
+    padding: 0;
+}}
+.selbtn {{
+    background: transparent; border: none; color: {fg};
+    padding: 3px 11px; border-radius: 6px; font-size: 12px;
+}}
+.selbtn:hover {{ background: {accent}; color: {on_accent}; }}
+
 /* ---- command palette --------------------------------------------------- */
 .palette {{ background: {panel}; border: 1px solid {border}; border-radius: 10px; }}
 .palette entry {{

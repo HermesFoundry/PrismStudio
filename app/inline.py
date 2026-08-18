@@ -257,6 +257,9 @@ class EditBar(Gtk.Revealer):
         self.entry.grab_focus()
 
     def close(self):
+        bar = getattr(self.editor.win, "selection", None)
+        if bar:
+            bar.suppress(False)
         self.set_reveal_child(False)
         self.note.set_text("")
         self.entry.set_text("")
