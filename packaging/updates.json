@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "released": "2026-08-18",
+  "title": "PrismStudio 1.0.0",
+  "notes": [
+    "The first release as its own application, out of the Iris Terminal code view.",
+    "Source control: stage, commit, push and read history without leaving the editor.",
+    "Language servers for thirteen languages, so diagnostics and go-to-definition are real.",
+    "Highlight anything for Ask Claude, Change, Search and Copy.",
+    "Claude can be switched off completely, and nothing else is lost."
+  ],
+  "url": "https://github.com/HermesFoundry/PrismStudio",
+  "command": "git pull --ff-only && ./install.sh",
+  "important": false
+}
