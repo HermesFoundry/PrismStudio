@@ -12,6 +12,7 @@ GTK3, Python, native. No Electron, no browser, no telemetry.
 <img src="https://img.shields.io/badge/Linux-desktop%20app-f0a848?style=flat-square" alt="Linux desktop app">
 <img src="https://img.shields.io/badge/tests-410%20checks-b48ead?style=flat-square" alt="410 checks">
 <img src="https://img.shields.io/badge/version-1.0.0-8fbcbb?style=flat-square" alt="version 1.0.0">
+<img src="https://img.shields.io/badge/licence-MIT-88c0d0?style=flat-square" alt="MIT licence">
 
 <br>
 
@@ -408,6 +409,20 @@ if it somehow ran zero checks.
 | skins | `themes/` |
 | settings · shortcuts · extensions | `~/.config/prismstudio/` |
 | session and recent folders | `~/.cache/prismstudio/state.json` |
+
+---
+
+## Licence and contributing
+
+[MIT](LICENSE). PrismStudio bundles no third-party code — GTK, VTE and
+GtkSourceView are imported through PyGObject at runtime and come from your
+distribution. The application icon is not covered by the grant; it is the
+project owner's artwork.
+
+Issues and pull requests are welcome. There is no CI, so run the suites before
+opening one — they are quick, they do not need the network except where they
+say so, and each starts its own headless display on its own port so a running
+PrismStudio cannot answer for them.
 
 ---
 
