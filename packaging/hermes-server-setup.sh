@@ -5,6 +5,8 @@
 #
 #     sudo bash hermes-server-setup.sh
 #
+# Override SITE and OWNER if your nginx config or deploy user differ.
+#
 # It makes /var/www/prismstudio, writable by the deploy user, and serves it at
 # https://hermesarcade.co.za/prismstudio/. It touches nothing else: the casino
 # proxy, the HermesOS downloads and the Jenkins redirects are left exactly as
@@ -14,7 +16,9 @@
 set -euo pipefail
 
 SITE="${SITE:-/etc/nginx/sites-available/hermesarcade.co.za}"
-OWNER="${OWNER:-${SUDO_USER:-root}}"
+# Whoever will publish updates. Under sudo, that is the account that invoked
+# it, which is nearly always right and keeps a username out of the source.
+OWNER="${OWNER:-${SUDO_USER:-$(logname 2>/dev/null || echo root)}}"
 ROOT_DIR="${ROOT_DIR:-/var/www/prismstudio}"
 BEGIN="# >>> prismstudio updates >>>"
 END="# <<< prismstudio updates <<<"

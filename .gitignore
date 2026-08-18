@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .venv/
+
+# deployment detail, never in the repository
+packaging/publish.conf

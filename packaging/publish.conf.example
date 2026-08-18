@@ -1,0 +1,5 @@
+# Copy to packaging/publish.conf and fill in. That file is gitignored: a public
+# repository is no place for the address of a machine you can SSH into.
+PRISM_UPDATE_HOST=user@your-server
+PRISM_UPDATE_PATH=/var/www/prismstudio/updates.json
+PRISM_UPDATE_URL=https://your-site/prismstudio/updates.json

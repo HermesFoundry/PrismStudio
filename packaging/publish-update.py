@@ -32,10 +32,37 @@ ROOT = os.path.dirname(HERE)
 MANIFEST = os.path.join(HERE, "updates.json")
 sys.path.insert(0, os.path.join(ROOT, "app"))
 
-HOST = os.environ.get("PRISM_UPDATE_HOST", "")
-REMOTE = os.environ.get("PRISM_UPDATE_PATH", "/var/www/prismstudio/updates.json")
-PUBLIC = os.environ.get("PRISM_UPDATE_URL",
-                        "https://hermesarcade.co.za/prismstudio/updates.json")
+# Where to publish is deployment detail, not source. It comes from the
+# environment or from packaging/publish.conf, which is not in this repository:
+# a public repo is no place for the address of a machine you can SSH into.
+#
+#     packaging/publish.conf
+#     PRISM_UPDATE_HOST=user@your-server
+#     PRISM_UPDATE_PATH=/var/www/prismstudio/updates.json
+#     PRISM_UPDATE_URL=https://your-site/prismstudio/updates.json
+SETTINGS = os.path.join(HERE, "publish.conf")
+
+
+def _configured():
+    """The environment wins; publish.conf fills in what it does not set."""
+    values = {}
+    if os.path.exists(SETTINGS):
+        with open(SETTINGS) as handle:
+            for line in handle:
+                line = line.split("#", 1)[0].strip()
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    values[key.strip()] = value.strip().strip("\"'")
+    for key in ("PRISM_UPDATE_HOST", "PRISM_UPDATE_PATH", "PRISM_UPDATE_URL"):
+        if os.environ.get(key):
+            values[key] = os.environ[key]
+    return values
+
+
+_CONF = _configured()
+HOST = _CONF.get("PRISM_UPDATE_HOST", "")
+REMOTE = _CONF.get("PRISM_UPDATE_PATH", "/var/www/prismstudio/updates.json")
+PUBLIC = _CONF.get("PRISM_UPDATE_URL", "")
 
 
 def today():
@@ -128,6 +155,11 @@ def main():
     if args.dry_run:
         print("· dry run, nothing sent")
         return 0
+
+    if not HOST or not PUBLIC:
+        return fail("no publishing target configured.\n"
+                    "Write packaging/publish.conf (see the top of this file), "
+                    "or set PRISM_UPDATE_HOST and PRISM_UPDATE_URL.")
 
     # -- send it -----------------------------------------------------------
     staging = REMOTE + ".new"
