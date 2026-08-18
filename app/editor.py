@@ -14,12 +14,20 @@ from gi.repository import Gdk, Gio, GLib, GtkSource, Gtk, Pango  # noqa: E402
 
 import assist  # noqa: E402
 import core  # noqa: E402
+import core  # noqa: E402
 import inline  # noqa: E402
+import lsp  # noqa: E402
 import sourcestyle  # noqa: E402
 
 MAX_BYTES = 4 * 1024 * 1024
 LOCAL_DELAY = 80            # ms of quiet before the offline suggestion appears
 AUTOSAVE_DELAY = 1400       # ms of quiet before an open file is written back
+
+
+def _rgba(colour):
+    got = Gdk.RGBA()
+    got.parse(colour)
+    return got
 
 
 def _changed_span(was, now):
@@ -334,6 +342,8 @@ class Editor(Gtk.Box):
             self.claude_delay = max(400, int(cfg.get("SUGGEST_DELAY", "1200")))
         except ValueError:
             self.claude_delay = 1200
+        self.lsp = getattr(win, "lsp", None)
+        self._lsp_timer = None
         self._local_timer = None
         self._claude_timer = None
         self._autosave_timer = None
@@ -363,6 +373,10 @@ class Editor(Gtk.Box):
         self.info_label.get_style_context().add_class("statusitem")
         self.hint_label = Gtk.Label(label="")
         self.hint_label.get_style_context().add_class("assisthint")
+        self.diag_label = Gtk.Label(label="")
+        self.diag_label.set_ellipsize(Pango.EllipsizeMode.END)
+        self.diag_label.set_max_width_chars(56)
+        self.diag_label.get_style_context().add_class("statusitem")
         self.wrap_btn = Gtk.Button(label="wrap: off")
         self.wrap_btn.set_relief(Gtk.ReliefStyle.NONE)
         self.wrap_btn.get_style_context().add_class("statusbtn")
@@ -436,6 +450,7 @@ class Editor(Gtk.Box):
         self._add(doc, focus)
         if self.registry is not None:
             self.registry.fire("on_open", path)
+        self.lsp_open(doc)
         return True
 
     @staticmethod
@@ -547,6 +562,7 @@ class Editor(Gtk.Box):
         if doc.monitor:
             doc.monitor.cancel()
         self.local.forget(doc.key)
+        self.lsp_close(doc)
         index = self.docs.index(doc)
         self.docs.remove(doc)
         if self.docs:
@@ -609,6 +625,10 @@ class Editor(Gtk.Box):
             self.on_saved(path)
         if self.registry is not None:
             self.registry.fire("on_save", path)
+        if first:
+            self.lsp_open(doc)
+        else:
+            self.lsp_saved(doc)
         return True
 
     def _ask_where(self, doc):
@@ -672,6 +692,19 @@ class Editor(Gtk.Box):
         lang = doc.buffer.get_language()
         self.lang_label.set_text(lang.get_name() if lang else "plain text")
         self.info_label.set_text("%d lines" % doc.buffer.get_line_count())
+        if self.lsp is not None and doc.path:
+            errors, warnings = self.lsp.counts(doc.path)
+            bits = []
+            if errors:
+                bits.append("%d error%s" % (errors, "" if errors == 1 else "s"))
+            if warnings:
+                bits.append("%d warning%s" % (warnings, "" if warnings == 1 else "s"))
+            here = self.diagnostic_at_cursor()
+            self.diag_label.set_text(here or ("  ".join(bits) if bits else ""))
+            context = self.diag_label.get_style_context()
+            context.remove_class("statusbad")
+            if errors or here.startswith("error"):
+                context.add_class("statusbad")
         self.notify_window()
 
     def status_message(self, text):
@@ -718,6 +751,176 @@ class Editor(Gtk.Box):
         popover.show_all()
         entry.grab_focus()
 
+    # -- the language server ---------------------------------------------------
+    def _language_id(self, doc):
+        language = doc.buffer.get_language()
+        ident = language.get_id() if language else None
+        return ident, lsp.LSP_ID.get(ident, ident)
+
+    def lsp_open(self, doc):
+        if self.lsp is None or not doc.path:
+            return
+        ident, wire = self._language_id(doc)
+        server = self.lsp.server_for(ident)
+        if server:
+            server.did_open(doc.path, wire, doc.text())
+
+    def lsp_close(self, doc):
+        if self.lsp is None or not doc.path:
+            return
+        server = self.lsp.server_for(self._language_id(doc)[0], start=False)
+        if server:
+            server.did_close(doc.path)
+
+    def lsp_changed(self, doc):
+        """Tell the server what the file says now, but not on every keystroke."""
+        if self.lsp is None or not doc.path:
+            return
+        if self._lsp_timer:
+            GLib.source_remove(self._lsp_timer)
+
+        def send():
+            self._lsp_timer = None
+            server = self.lsp.server_for(self._language_id(doc)[0], start=False)
+            if server:
+                server.did_change(doc.path, doc.text())
+            return False
+
+        self._lsp_timer = GLib.timeout_add(420, send)
+
+    def lsp_saved(self, doc):
+        if self.lsp is None or not doc.path:
+            return
+        server = self.lsp.server_for(self._language_id(doc)[0], start=False)
+        if server:
+            server.did_save(doc.path, doc.text())
+
+    def show_diagnostics(self, path, items):
+        """Underline what the server complained about, in the right document."""
+        doc = next((d for d in self.docs if d.path == path), None)
+        if doc is None:
+            return
+        buffer = doc.buffer
+        table = buffer.get_tag_table()
+        for name, colour in (("lsp-error", self._diag_error),
+                             ("lsp-warning", self._diag_warning)):
+            tag = table.lookup(name)
+            if tag is None:
+                tag = buffer.create_tag(name)
+                tag.set_property("underline", Pango.Underline.ERROR)
+            tag.set_property("underline-rgba", colour)
+            buffer.remove_tag(tag, buffer.get_start_iter(), buffer.get_end_iter())
+        for item in items:
+            severity = item.get("severity", 1)
+            if severity > 2:
+                continue
+            tag = table.lookup("lsp-error" if severity == 1 else "lsp-warning")
+            start = self._iter_at(buffer, item["range"]["start"])
+            end = self._iter_at(buffer, item["range"]["end"])
+            if end.compare(start) <= 0:
+                end = start.copy()
+                if not end.ends_line():
+                    end.forward_char()
+            buffer.apply_tag(tag, start, end)
+        if doc is self.current:
+            self._sync_status()
+
+    @staticmethod
+    def _iter_at(buffer, position):
+        line = max(0, min(position.get("line", 0), buffer.get_line_count() - 1))
+        it = buffer.get_iter_at_line(line)
+        column = position.get("character", 0)
+        for _ in range(column):
+            if it.ends_line():
+                break
+            it.forward_char()
+        return it
+
+    def diagnostic_at_cursor(self):
+        """The message for whatever the cursor is sitting inside, if anything."""
+        doc = self.current
+        if doc is None or self.lsp is None or not doc.path:
+            return ""
+        items = self.lsp.diagnostics.get(doc.path) or []
+        it = doc.buffer.get_iter_at_mark(doc.buffer.get_insert())
+        line, column = it.get_line(), it.get_line_offset()
+        for item in items:
+            start, end = item["range"]["start"], item["range"]["end"]
+            if start["line"] <= line <= end["line"]:
+                if line == start["line"] and column < start["character"]:
+                    continue
+                if line == end["line"] and column > end["character"]:
+                    continue
+                return "%s: %s" % (lsp.SEVERITY.get(item.get("severity", 1)),
+                                   item.get("message", "").split("\n")[0])
+        return ""
+
+    def go_to_definition(self):
+        doc = self.current
+        if doc is None or self.lsp is None or not doc.path:
+            return False
+        server = self.lsp.server_for(self._language_id(doc)[0])
+        if server is None:
+            self.status_message("no language server for this file")
+            return False
+        it = doc.buffer.get_iter_at_mark(doc.buffer.get_insert())
+
+        def landed(result, error):
+            if error or not result:
+                self.status_message("no definition found")
+                return
+            first = result[0] if isinstance(result, list) else result
+            target = first.get("uri") or first.get("targetUri")
+            span = first.get("range") or first.get("targetSelectionRange") or {}
+            path = lsp.path_for(target or "")
+            line = span.get("start", {}).get("line", 0) + 1
+            if path and os.path.isfile(path):
+                self.open(path)
+                self.go_to(line)
+                self.status_message("%s:%d" % (os.path.basename(path), line))
+            else:
+                self.status_message("definition is outside this workspace")
+
+        server.definition(doc.path, it.get_line(), it.get_line_offset(), landed)
+        self.status_message("looking…")
+        return True
+
+    def lsp_suggest(self):
+        """Ask the server what could come next, and fold it into the ghost text."""
+        doc = self.current
+        if doc is None or self.lsp is None or not doc.path:
+            return
+        server = self.lsp.server_for(self._language_id(doc)[0])
+        if server is None or not server.ready:
+            return
+        it = doc.buffer.get_iter_at_mark(doc.buffer.get_insert())
+        line, column = it.get_line(), it.get_line_offset()
+        at = doc.revision
+
+        def landed(result, error):
+            if error or doc.revision != at or doc is not self.current:
+                return
+            items = (result or {}).get("items") if isinstance(result, dict) else result
+            prefix = assist.IDENT_TAIL.search(
+                doc.buffer.get_text(doc.buffer.get_start_iter(), it, True))
+            prefix = prefix.group(1) if prefix else ""
+            best = None
+            for item in (items or [])[:60]:
+                label = (item.get("insertText") or item.get("label") or "").strip()
+                if not label or label in ("(", ")"):
+                    continue
+                if prefix and not label.startswith(prefix):
+                    continue
+                rest = label[len(prefix):]
+                if rest:
+                    best = rest
+                    break
+            if best:
+                self.ghost.add(assist.Suggestion(best, "lsp", server.name))
+                self._sync_hint()
+
+        server.completion(doc.path, line, column, landed)
+
     # -- suggestions ----------------------------------------------------------
     def _typed(self, doc):
         """Something changed in the buffer: re-suggest, and maybe save."""
@@ -730,6 +933,7 @@ class Editor(Gtk.Box):
         if self.suggest_mode == "claude":
             self._claude_timer = GLib.timeout_add(self.claude_delay,
                                                   lambda: self.request_claude(False))
+        self.lsp_changed(doc)
         if self.autosave and doc.path:
             self._autosave_timer = GLib.timeout_add(AUTOSAVE_DELAY, self._autosave)
         self._sync_hint()
@@ -772,6 +976,7 @@ class Editor(Gtk.Box):
         items = self.local.suggest(before, after, counts, language)
         if items:
             self.ghost.show(items)
+        self.lsp_suggest()          # arrives a moment later and jumps the queue
         self._sync_hint()
         return False
 
@@ -1041,6 +1246,9 @@ class Editor(Gtk.Box):
                 self._sync_hint()
                 return True
 
+        if key == Gdk.KEY_F12:
+            self.go_to_definition()
+            return True
         if key == Gdk.KEY_F3:
             self.findbar.step(-1 if shift else 1)
             return True
@@ -1089,4 +1297,6 @@ class Editor(Gtk.Box):
         self.view.override_font(Pango.FontDescription.from_string(
             cfg.get("FONT", "Ubuntu Sans Mono 11")))
         self._touch_colour = core.mix(theme["BG"], theme["ACCENT"], 0.28)
+        self._diag_error = _rgba(theme["URGENT"])
+        self._diag_warning = _rgba(theme["ACCENT2"])
         self.ghost.restyle(theme)

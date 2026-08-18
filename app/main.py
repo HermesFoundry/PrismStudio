@@ -26,6 +26,7 @@ from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
 import core  # noqa: E402
 import extensions  # noqa: E402
 import keymap  # noqa: E402
+import lsp  # noqa: E402
 import styling  # noqa: E402
 import workspace  # noqa: E402
 from assistant import Assistant  # noqa: E402
@@ -117,6 +118,10 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.sidebar.pack_start(self.side_stack, True, True, 0)
 
         # ---- editor and panel ------------------------------------------------
+        self.lsp = lsp.Client(None, on_diagnostics=self._diagnostics,
+                              on_log=lambda text: self.panel.write(text)
+                              if getattr(self, "panel", None) else None)
+        self.lsp.enabled = self.cfg.get("LSP", "1") == "1"
         self.editor = Editor(self, None, self.say_from_editor)
         self.editor.on_saved = self.file_saved
         self.editor.on_ask = self.point_claude_at
@@ -206,7 +211,8 @@ class PrismWindow(Gtk.ApplicationWindow):
         menu("Edit", [("Undo", "undo"), ("Redo", "redo"), None,
                       ("Find…", "find"), ("Replace…", "replace"),
                       ("Search the workspace…", "search"), None,
-                      ("Go to line…", "go-to-line")])
+                      ("Go to line…", "go-to-line"),
+                      ("Go to definition", "go-to-definition")])
         menu("View", [("Explorer", "side-explorer"), ("Search", "side-search"),
                       ("Source control", "side-git"), ("Run", "side-run"),
                       ("Extensions", "side-extensions"), None,
@@ -282,6 +288,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         bar.pack_start(self.branch_label, False, False, 0)
         bar.pack_start(self.message_label, True, True, 0)
         # these widgets are owned by the editor and borrowed here
+        bar.pack_start(self.editor.diag_label, False, False, 0)
         for widget in (self.editor.hint_label, self.editor.pos_label,
                        self.editor.lang_label, self.editor.info_label,
                        self.editor.assist_btn, self.editor.wrap_btn):
@@ -450,6 +457,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.explorer.set_root(path)
         self.search.set_folder(path)
         self.git.set_root(path)
+        self.lsp.set_root(path)
         workspace.remember_folder(path)
         self.runbar.rescan()
         self._sync_run_side()
@@ -473,6 +481,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.explorer.set_root(None)
         self.search.set_folder(None)
         self.git.set_root(None)
+        self.lsp.set_root(None)
         self.runbar.rescan()
         self._sync_title()
         self.say("closed the folder")
@@ -605,6 +614,9 @@ class PrismWindow(Gtk.ApplicationWindow):
     def say_from_editor(self, text, bad=False):
         self.say(text, bad)
 
+    def _diagnostics(self, path, items):
+        self.editor.show_diagnostics(path, items)
+
     def editor_status_changed(self, _editor):
         self._sync_title()
 
@@ -696,6 +708,7 @@ class PrismWindow(Gtk.ApplicationWindow):
             "find": lambda: (editor.findbar.open(), True)[1],
             "replace": lambda: (editor.findbar.open(with_replace=True), True)[1],
             "go-to-line": lambda: (editor.go_to_line(), True)[1],
+            "go-to-definition": lambda: (editor.go_to_definition(), True)[1],
             "search": self.focus_search,
             "side-explorer": lambda: self._side("explorer"),
             "side-search": lambda: self._side("search"),
@@ -875,6 +888,7 @@ class PrismWindow(Gtk.ApplicationWindow):
             if unsaved and not self._confirm_unsaved(unsaved):
                 return True
         self._save_session()
+        self.lsp.shutdown()
         core.save_settings({"SIDEBAR": self.cfg.get("SIDEBAR", "explorer"),
                             "PANEL": self.cfg.get("PANEL", "0"),
                             "ASSISTANT": self.cfg.get("ASSISTANT", "1")})

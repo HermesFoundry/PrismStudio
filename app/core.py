@@ -66,6 +66,7 @@ DEFAULTS = {
     "SHELL": os.environ.get("SHELL", "/bin/bash"),
 
     # the rest
+    "LSP": "1",                 # use language servers found on your PATH
     "EXTENSIONS": "1",
     "CONFIRM_CLOSE": "1",
     "SCROLLBACK": "50000",

@@ -41,6 +41,7 @@ ACTIONS = [
     ("replace",         "Find and replace",         "Edit",   "Ctrl+H",            "Ctrl+Shift+H"),
     ("search",          "Search the workspace",     "Edit",   "Ctrl+Shift+F",      "Ctrl+Alt+F"),
     ("go-to-line",      "Go to line…",              "Edit",   "Ctrl+G",            "Ctrl+Shift+G"),
+    ("go-to-definition", "Go to definition",        "Edit",   "F12",               "F12"),
 
     ("side-explorer",   "Explorer",                 "View",   "Ctrl+Shift+E",      "Ctrl+Shift+E"),
     ("side-search",     "Search panel",             "View",   "Ctrl+Alt+F",        "Ctrl+Alt+F"),
