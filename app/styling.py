@@ -332,10 +332,41 @@ paned > separator:hover {{ background: {accent}; }}
     border-radius: 6px; padding: 3px 10px;
 }}
 .prefs button:hover {{ border-color: {accent}; }}
+.prefs button:disabled {{ color: {dim}; border-color: {border}; }}
+/* Without these, every text box in every dialog arrives Adwaita-white. */
+.prefs entry {{
+    background: {sunken}; color: {fg}; border: 1px solid {border};
+    border-radius: 6px; padding: 5px 8px; caret-color: {fg};
+}}
+.prefs entry:focus {{ border-color: {accent}; }}
+.prefs entry selection {{ background: {accent}; color: {on_accent}; }}
+.prefs entry image {{ color: {dim}; }}
+.prefs combobox button {{ background: {raised}; color: {fg}; }}
+.prefs checkbutton {{ color: {fg}; }}
+.prefs scrolledwindow, .prefs viewport, .prefs list {{ background: {bg}; }}
 /* Where there is no window manager to draw one, GTK draws its own
    title bar and it arrives Adwaita-white. */
 .prefs headerbar, .prefs .titlebar {{
     background: {head}; color: {fg}; border-bottom: 1px solid {border};
+}}
+
+/* ---- github ------------------------------------------------------------ */
+.ghbar {{
+    background: {head}; border: 1px solid {border}; border-radius: 8px;
+    padding: 11px 13px;
+}}
+.ghlist {{ background: {sunken}; }}
+.ghlist row {{ border-bottom: 1px solid {border}; }}
+.ghlist row:selected {{ background: {raised}; }}
+.ghname {{ color: {fg}; font-weight: 700; }}
+.ghtag {{
+    background: {raised}; color: {dim}; font-size: 10px; border-radius: 4px;
+    padding: 0 6px;
+}}
+.ghkey {{ color: {dim}; font-family: monospace; font-size: 11px; }}
+.devicecode {{
+    color: {accent}; font-family: monospace; font-size: 30px;
+    font-weight: 700; letter-spacing: 3px;
 }}
 
 /* ---- the update card --------------------------------------------------- */
@@ -364,6 +395,9 @@ paned > separator:hover {{ background: {accent}; }}
 .whatsnew button.wnprimary {{
     background: {accent}; color: {on_accent}; border-color: {accent};
     font-weight: 700;
+}}
+.whatsnew button.wnprimary:disabled {{
+    background: {raised}; color: {dim}; border-color: {border};
 }}
 .whatsnew button.wnprimary:hover {{
     background: {accent}; border-color: {fg}; color: {on_accent};

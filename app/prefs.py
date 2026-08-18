@@ -4,11 +4,12 @@ Five pages: how it looks, how the editor behaves, what the assistant does,
 which extensions are loaded, and the keyboard.
 """
 import os
+import threading
 
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gdk, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 import core  # noqa: E402
 import extensions  # noqa: E402
@@ -33,6 +34,7 @@ class PrefsDialog(Gtk.Dialog):
         book.append_page(self._assistant_page(), Gtk.Label(label="Claude"))
         book.append_page(self._extensions_page(), Gtk.Label(label="Extensions"))
         book.append_page(self._keys_page(), Gtk.Label(label="Keys"))
+        book.append_page(self._github_page(), Gtk.Label(label="GitHub"))
         book.append_page(self._updates_page(), Gtk.Label(label="Updates"))
         area = self.get_content_area()
         area.set_spacing(0)
@@ -260,6 +262,202 @@ class PrefsDialog(Gtk.Dialog):
         self._row(column, "Save before Claude reads a file",
                   self._switch("FLUSH_FOR_CLAUDE", "1"))
         return scroll
+
+    # -- github ----------------------------------------------------------------
+    def _github_page(self):
+        scroll, column = self._page()
+        self._heading(column, "GitHub",
+                      "Signing in, cloning and publishing go through the "
+                      "GitHub CLI (gh), which keeps your token in the system "
+                      "keyring. PrismStudio never reads it.")
+
+        import clone as clone_mod
+        self.account_bar = clone_mod.AccountBar(self.win,
+                                                on_change=lambda _a: self._keys())
+        column.pack_start(self.account_bar, False, False, 0)
+
+        protocol = Gtk.ComboBoxText()
+        for value, label in (("ssh", "SSH — git@github.com:owner/name.git"),
+                             ("https", "HTTPS — https://github.com/owner/name")):
+            protocol.append(value, label)
+        protocol.set_active_id(self.win.cfg.get("GIT_PROTOCOL", "ssh"))
+        protocol.connect("changed",
+                         lambda c: self._set("GIT_PROTOCOL", c.get_active_id()))
+        self._row(column, "Clone over", protocol)
+
+        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        for label, handler in (("Clone a repository…", self._do_clone),
+                               ("Publish this folder…", self._do_publish)):
+            button = Gtk.Button(label=label)
+            button.connect("clicked", handler)
+            buttons.pack_start(button, False, False, 0)
+        column.pack_start(buttons, False, False, 2)
+
+        self._heading(column, "Copilot",
+                      "GitHub Copilot as a suggestion source. It needs its "
+                      "language server installed and a Copilot subscription — "
+                      "being signed in to gh is not the same thing.")
+        self.copilot_status = Gtk.Label(xalign=0)
+        self.copilot_status.set_line_wrap(True)
+        self.copilot_status.get_style_context().add_class("hint")
+        column.pack_start(self.copilot_status, False, False, 0)
+
+        command = Gtk.Entry()
+        command.set_text(self.win.cfg.get("COPILOT_CMD", "copilot-language-server"))
+        command.connect("changed", lambda e: self._set("COPILOT_CMD", e.get_text()))
+        self._row(column, "Language server", command)
+
+        copilot_buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        for label, handler in (("Sign in to Copilot", self._copilot_in),
+                               ("Sign out", self._copilot_out),
+                               ("Check", lambda *_: self._copilot_state())):
+            button = Gtk.Button(label=label)
+            button.connect("clicked", handler)
+            copilot_buttons.pack_start(button, False, False, 0)
+        column.pack_start(copilot_buttons, False, False, 2)
+        self._copilot_state()
+
+        self._heading(column, "SSH keys",
+                      "Cloning over SSH needs a key GitHub knows about. "
+                      "Test the connection to find out whether it does.")
+        self.key_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        column.pack_start(self.key_box, False, False, 0)
+
+        key_buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        for label, handler in (("Test the connection", self._test_ssh),
+                               ("Upload a key…", self._upload_key),
+                               ("Make a new key…", self._make_key)):
+            button = Gtk.Button(label=label)
+            button.connect("clicked", handler)
+            key_buttons.pack_start(button, False, False, 0)
+        column.pack_start(key_buttons, False, False, 2)
+
+        self.key_status = Gtk.Label(xalign=0)
+        self.key_status.set_line_wrap(True)
+        self.key_status.get_style_context().add_class("hint")
+        column.pack_start(self.key_status, False, False, 0)
+        self._keys()
+        return scroll
+
+    def _copilot_state(self):
+        client = getattr(self.win, "copilot", None)
+        if client is None:
+            self.copilot_status.set_text("not available in this window")
+            return
+        if not client.available():
+            self.copilot_status.set_markup(
+                "Not installed. <tt>npm install -g "
+                "@github/copilot-language-server</tt>")
+            return
+        kind, message = client.status()
+        words = {"off": "installed, not started yet",
+                 "starting": "starting…",
+                 "ready": "signed in and answering",
+                 "signed-out": "installed, but not signed in",
+                 "no-subscription": "signed in, but this account has no Copilot",
+                 "inactive": "not offering suggestions for this file",
+                 "warning": "having trouble",
+                 "missing": "not installed",
+                 "error": "not working"}
+        self.copilot_status.set_text(
+            words.get(kind, kind) + (" — " + message if message else ""))
+
+    def _copilot_in(self, *_):
+        self.win.copilot_sign_in()
+        GLib.timeout_add_seconds(3, lambda: (self._copilot_state(), False)[1])
+
+    def _copilot_out(self, *_):
+        self.win.copilot_sign_out()
+        GLib.timeout_add_seconds(2, lambda: (self._copilot_state(), False)[1])
+
+    def _keys(self):
+        import github
+        for child in self.key_box.get_children():
+            self.key_box.remove(child)
+        local = github.local_ssh_keys()
+        remote = github.ssh_keys() if github.account().signed_in else []
+        if remote:
+            titles = ", ".join(title for title, _ in remote[:6])
+            text = "On your account: %s" % titles
+        elif github.account().signed_in:
+            text = "No keys on your account yet."
+        else:
+            text = "Sign in to see the keys on your account."
+        label = Gtk.Label(label=text, xalign=0)
+        label.set_line_wrap(True)
+        label.get_style_context().add_class("hint")
+        self.key_box.pack_start(label, False, False, 0)
+        if local:
+            names = ", ".join(name for _, name, _ in local)
+            here = Gtk.Label(label="On this machine: " + names, xalign=0)
+            here.set_line_wrap(True)
+            here.get_style_context().add_class("ghkey")
+            self.key_box.pack_start(here, False, False, 0)
+        self.key_box.show_all()
+
+    def _do_clone(self, *_):
+        self.win.show_clone()
+
+    def _do_publish(self, *_):
+        self.win.show_publish()
+
+    def _test_ssh(self, *_):
+        import github
+        self.key_status.set_text("asking github.com…")
+
+        def work():
+            ok, message = github.test_ssh()
+            GLib.idle_add(self.key_status.set_text,
+                          ("✓ " if ok else "✗ ") + message)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _upload_key(self, *_):
+        import github
+        local = github.local_ssh_keys()
+        if not local:
+            self.key_status.set_text("no public keys in ~/.ssh to upload")
+            return
+        dialog = Gtk.Dialog(title="Upload a public key", transient_for=self,
+                            modal=True)
+        dialog.get_style_context().add_class("prefs")
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Upload", Gtk.ResponseType.OK)
+        picker = Gtk.ComboBoxText()
+        for full, name, comment in local:
+            picker.append(full, "%s   %s" % (name, comment))
+        picker.set_active(0)
+        area = dialog.get_content_area()
+        area.set_border_width(14)
+        area.set_spacing(8)
+        note = Gtk.Label(xalign=0)
+        note.set_markup("<small>Only the <tt>.pub</tt> half is sent. The "
+                        "private key never leaves this machine.</small>")
+        note.set_line_wrap(True)
+        area.pack_start(picker, False, False, 0)
+        area.pack_start(note, False, False, 0)
+        dialog.show_all()
+        answer = dialog.run()
+        chosen = picker.get_active_id()
+        dialog.destroy()
+        if answer == Gtk.ResponseType.OK and chosen:
+            title = "%s (%s)" % (core.APP_NAME, os.uname().nodename)
+            self.win.run_in_panel(github.add_key_argv(chosen, title))
+            GLib.timeout_add_seconds(6, lambda: (self._keys(), False)[1])
+
+    def _make_key(self, *_):
+        import github
+        target = os.path.expanduser("~/.ssh/github_prismstudio")
+        if os.path.exists(target):
+            self.key_status.set_text("%s already exists — upload it instead"
+                                     % target)
+            return
+        comment = "%s@%s" % (os.environ.get("USER", "user"), os.uname().nodename)
+        self.win.run_in_panel("mkdir -p ~/.ssh && chmod 700 ~/.ssh && " +
+                              github.generate_key_argv(target, comment))
+        self.key_status.set_text("making %s in the terminal, then upload it"
+                                 % target)
+        GLib.timeout_add_seconds(6, lambda: (self._keys(), False)[1])
 
     # -- updates ---------------------------------------------------------------
     def _updates_page(self):
