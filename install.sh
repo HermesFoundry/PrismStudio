@@ -4,18 +4,21 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="${HOME}/.local/bin"
 APPS="${HOME}/.local/share/applications"
-ICONS="${HOME}/.local/share/icons/hicolor/scalable/apps"
+ICONS="${HOME}/.local/share/icons/hicolor"
 
-mkdir -p "$BIN" "$APPS" "$ICONS"
+mkdir -p "$BIN" "$APPS"
 ln -sf "$HERE/prism" "$BIN/prism"
 echo "linked  $BIN/prism"
 
 sed "s|__PRISM__|$HERE/prism|g" \
   "$HERE/packaging/foundry.hermes.PrismStudio.desktop.in" \
   > "$APPS/foundry.hermes.PrismStudio.desktop"
-cp "$HERE/packaging/foundry.hermes.PrismStudio.svg" \
-  "$ICONS/foundry.hermes.PrismStudio.svg"
-echo "installed the desktop entry and icon"
+for size in 16 24 32 48 64 96 128 256 512; do
+  dir="$ICONS/${size}x${size}/apps"
+  mkdir -p "$dir"
+  cp "$HERE/packaging/icons/${size}.png" "$dir/foundry.hermes.PrismStudio.png"
+done
+echo "installed the desktop entry and icons"
 
 command -v update-desktop-database >/dev/null && update-desktop-database "$APPS" || true
 command -v gtk-update-icon-cache >/dev/null && \
