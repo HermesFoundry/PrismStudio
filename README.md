@@ -1,147 +1,175 @@
+<div align="center">
+
+<img src="docs/media/icon.png" width="92" alt="PrismStudio">
+
 # PrismStudio
 
-An editor with Claude beside it. GTK3, Python, no Electron.
+**An editor with Claude beside it.**
+GTK3, Python, native. No Electron, no browser, no telemetry.
 
-It started as the code view inside Iris Terminal and outgrew it: a terminal
-with an editor tab is not the same shape as an editor with a terminal panel.
-This is the second shape.
+<img src="https://img.shields.io/badge/GTK-3-4fb3ff?style=flat-square" alt="GTK 3">
+<img src="https://img.shields.io/badge/Python-3.10%2B-3ddc97?style=flat-square" alt="Python 3.10+">
+<img src="https://img.shields.io/badge/Linux-desktop%20app-f0a848?style=flat-square" alt="Linux desktop app">
+<img src="https://img.shields.io/badge/tests-283%20checks-b48ead?style=flat-square" alt="283 checks">
 
-```
-┌──┬──────────┬───────────────────────────────┬──────────┐
-│a │ side bar │ editor                        │ Claude   │
-│c │          ├───────────────────────────────┤          │
-│t │          │ panel: terminals, output      │          │
-├──┴──────────┴───────────────────────────────┴──────────┤
-│ ⎇ main    line 12, col 4   Python   assist: file        │
-└─────────────────────────────────────────────────────────┘
-```
+<br>
+
+<img src="docs/media/tour.gif" width="880" alt="Open a folder, edit, take a suggestion, ask Claude to change something, run it, open it in a browser">
+
+</div>
+
+---
 
 ```sh
-./install.sh          # links `prism` into ~/.local/bin, adds a desktop entry
-prism                 # reopens the folder you had last time
-prism .               # this folder
-prism ~/project       # that folder
-prism a.py b.py       # just those files
+git clone git@github.com:HermesFoundry/PrismStudio.git
+cd PrismStudio && ./install.sh     # links `prism`, adds a desktop entry
+prism .                            # open this folder
 ```
 
-Needs `python3-gi`, `gir1.2-vte-2.91`, `gir1.2-gtksource-4`. `install.sh` says
-which are missing.
+`install.sh` tells you which of `python3-gi`, `gir1.2-vte-2.91` and
+`gir1.2-gtksource-4` are missing rather than failing on import.
+
+| | |
+|---|---|
+| `prism` | reopen the folder you had last time |
+| `prism .` · `prism ~/project` | open a folder |
+| `prism a.py b.py` | open just those files |
 
 ---
 
 ## The window
 
-**Activity bar** down the left switches the side bar between Explorer, Search,
-Run and Extensions. **Ctrl+B** hides the side bar, **Ctrl+J** the panel,
-**Ctrl+Shift+C** Claude. Every divider drags.
+<img src="docs/media/window.png" alt="The PrismStudio window">
 
-**It opens empty.** Nothing on the machine is listed until you open a folder;
-the panel offers *Open folder*, *Open file* and your recent folders, and
-nothing else.
+Activity bar down the left switches the side bar between **Explorer**,
+**Search**, **Run** and **Extensions**. The editor is the middle. The terminal
+panel lives underneath, Claude down the right, and a status bar along the
+bottom. `Ctrl+B` hides the side bar, `Ctrl+J` the panel, `Ctrl+Shift+C` Claude.
+Every divider drags.
+
+**It opens empty.** Nothing on the machine is listed until you open a folder —
+before that the panel offers Open folder, Open file and your recent folders,
+and nothing else.
 
 **It remembers.** Close it with four files open and it comes back with those
 four files open, cursors where you left them, in the folder you were in.
-Turn that off with `RESTORE_SESSION=0`.
 
-## The editor
+<img src="docs/media/welcome.png" width="620" alt="The empty state">
 
-Several files at once, each with its own tab, undo history and cursor.
-Syntax highlighting for 169 languages, **coloured from the active skin** so the
-editor matches the terminal and Claude beside it rather than looking like a
-different program.
-
-| key | does |
-|---|---|
-| `Ctrl+N` `Ctrl+O` `Ctrl+K` | new file · open file · open folder |
-| `Ctrl+S` / `Ctrl+Shift+S` | save · save as |
-| `Ctrl+W` | close this file |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | next · previous file |
-| `Ctrl+F` / `Ctrl+H` | find · find and replace, in this file |
-| `Ctrl+Shift+F` | search every file in the workspace |
-| `Ctrl+G` | go to line |
-| `Ctrl+Shift+P` | command palette |
-
-**Search** uses ripgrep when it is installed and falls back to walking the tree
-in Python when it is not, so it never simply disappears. It skips `node_modules`,
-`.git`, `dist`, `__pycache__` and the rest without being asked.
+---
 
 ## Suggestions as you type
 
+<img src="docs/media/suggestions.png" alt="Ghost text at the cursor">
+
 Dim text at the cursor showing what you are probably about to type. `Tab` takes
-it, `Esc` drops it, `Alt+]` cycles, `Ctrl+Right` takes one word. It is drawn
-over the view, never inserted, so it cannot end up in your file or undo history
-by accident.
+it, `Esc` drops it, `Alt+]` cycles, `Ctrl+Right` takes one word. It is painted
+over the view, never inserted, so it cannot end up in your file or your undo
+history by accident.
+
+Two sources, and they are honestly different:
 
 | source | where it comes from | how quick |
-|---|---|---|
+|:--|:--|:--|
 | **file** | words and whole lines you already have open | instant, offline |
 | **Claude** | the `claude` command, asked to fill in at the cursor | about ten seconds |
 
 Ten seconds is not a per-keystroke completion and PrismStudio does not pretend
-otherwise: the Claude tier only runs after you stop typing, on a thread, and its
+otherwise. The Claude tier runs **after you stop typing**, on a thread, and its
 answer is dropped if you have moved on. The file tier is what makes typing feel
-assisted; Claude is what gets a whole block right. Switch with the **assist:**
-button on the status bar or `Ctrl+Shift+space`.
+assisted; Claude is what gets a whole block right.
+
+Switch source with the **assist:** button on the status bar, or
+`Ctrl+Shift+space`.
+
+---
 
 ## Claude working on the file with you
 
+<img src="docs/media/claude-edit.png" alt="The Ctrl+I edit bar">
+
 | you do | what happens |
-|---|---|
-| `Ctrl+I` | say what you want changed. Claude rewrites the selection and it lands as **one** `Ctrl+Z`, tinted so you can see it |
-| `Ctrl+Alt+A` | types `@thatfile.py line 40:` into the Claude pane, unsent, for you to finish |
+|:--|:--|
+| `Ctrl+I` | say what you want changed — Claude rewrites the selection and it lands as **one** `Ctrl+Z`, tinted so you can see it |
+| `Ctrl+Alt+A` | types `@thatfile.js line 40:` into the Claude pane, **unsent**, for you to finish |
 | Claude edits a file on disk | the editor reloads it and highlights exactly what changed |
 
 The open file is saved just before Claude reads it, so it never works from a
 stale copy. That is why background autosave is **off** by default — nothing
 rewrites your file until there is a reason to.
 
+Nothing is sent anywhere on your behalf. Pointing Claude at a file types a
+reference into its prompt and leaves the cursor there; you say what you want
+and press return yourself.
+
+---
+
 ## Run the app
 
-Open a folder and the bar above the editor reads whatever manifests are in it:
+<img src="docs/media/run.png" alt="The run bar, running">
+
+Open a folder and the bar above the editor reads whatever manifests are in it.
+**Install** runs the right command; **Run** starts it. When the thing you
+started prints a localhost address, the bar reads it out of the terminal and
+offers to open a browser there.
 
 ```
- ▶ Run   [ npm run dev ▾ ]   Node · npm    needs setup first    [Install packages]
- ■ Stop  [ npm run dev ▾ ]   Node · npm    http://localhost:5173  [Open in browser]
+▶ Run   [ npm run dev ▾ ]   Node · npm    needs setup first     [Install packages]
+■ Stop  [ npm run dev ▾ ]   Node · npm    http://localhost:4173  [Open in browser]
 ```
-
-It takes the package manager from the **lock file** (`pnpm-lock.yaml` means
-pnpm, not npm), says whether the dependencies are installed, and offers the
-targets the project itself declares. **Install** runs the right command;
-**Run** starts it. When the thing you started prints a localhost address, the
-bar reads it out of the terminal and offers to open a browser there.
 
 | it finds | it offers |
-|---|---|
+|:--|:--|
 | `package.json` | every script, `dev` and `start` first, via npm / pnpm / yarn / bun |
 | `manage.py` | Django's dev server, and migrate |
-| Flask, FastAPI, Streamlit | the right dev server for each |
-| `requirements.txt`, `pyproject.toml` | the install step, using the project's virtualenv if it has one |
-| `Cargo.toml`, `go.mod`, `composer.json`, `Gemfile` | cargo, go, php, bundler |
+| Flask · FastAPI · Streamlit | the right dev server for each |
+| `requirements.txt` · `pyproject.toml` | the install step, using the project's virtualenv if it has one |
+| `Cargo.toml` · `go.mod` · `composer.json` · `Gemfile` | cargo, go, php, bundler |
 | `docker-compose.yml` | `docker compose up` |
 | `index.html` alone | a static server for the folder |
 | a `Makefile` | its targets |
 
 Everything runs in the terminal panel where you can see it, so output, prompts
-and `Ctrl+C` behave exactly as if you had typed the command. Where a tool is
-missing it says so rather than substituting one — a pnpm project will not
-quietly get `npm install`, because that writes a second lock file that fights
-the first.
+and `Ctrl+C` behave exactly as if you had typed the command. **Stop** sends the
+same `Ctrl+C`.
 
-`Ctrl+Shift+B` runs, `Shift+F5` stops, `Ctrl+Shift+L` opens the browser,
-`F5` runs just the open file.
+Two things it will not do. The package manager comes from the **lock file**, so
+a `pnpm-lock.yaml` project never quietly gets `npm install` — that writes a
+second lock file which fights the first. And a tool that is not installed is
+reported with the reason instead of being substituted.
 
-## The terminal panel
+<div align="center">
+<img src="docs/media/served.png" width="620" alt="The demo app, served">
+<br><sub><i>…and the thing it was serving.</i></sub>
+</div>
 
-`Ctrl+J`, or the button in the title bar. Several terminals, a picker once
-there is more than one, each with its own working directory. **Terminal here**
-in the tree's right-click menu opens one in that folder. The **Output** tab is
-where the app talks to you at length instead of in the status bar.
+---
 
-## Extensions
+## Search the whole workspace
 
-`Ctrl+Shift+P` opens one searchable list of everything the app can do, built-in
-commands and extension commands together — loose matching, so `hvcct` finds
-*Have Claude change this*. That list is what makes an extension findable.
+<img src="docs/media/search.png" alt="Workspace search">
+
+`Ctrl+Shift+F`, seeded with whatever you had selected. It uses **ripgrep** when
+it is installed because it is enormously faster on a real tree, and falls back
+to walking the folder in Python when it is not, so the feature never simply
+disappears. `node_modules`, `.git`, `dist` and `__pycache__` are skipped
+without being asked, and the search runs off the main loop so the window keeps
+moving.
+
+---
+
+## Command palette and extensions
+
+<table>
+<tr>
+<td width="50%"><img src="docs/media/palette.png" alt="Command palette"></td>
+<td width="50%"><img src="docs/media/extensions.png" alt="Extensions panel"></td>
+</tr>
+</table>
+
+`Ctrl+Shift+P` puts every built-in command and every extension command in one
+searchable list, with loose subsequence matching — `hvcct` finds *Have Claude
+change this*. That list is what makes an extension findable at all.
 
 An extension is a Python file in `~/.config/prismstudio/extensions` with a
 `register(prism)` function:
@@ -155,38 +183,70 @@ def register(prism):
 
 It can add commands, offer inline suggestions, and hook save and open. Install
 one from **Settings → Extensions** (a file, a folder, or a git URL), toggle it
-off, or remove it. A broken one is listed with its error and skipped; it cannot
-stop the app from starting. They run in the editor's own process with your
-permissions, so read one before you install it.
+off, or remove it. A broken one is listed with its error and skipped — it
+cannot stop the app from starting.
+
+> They run in the editor's own process with your permissions. There is no
+> sandbox. Read one before you install it.
 
 Two worked examples and the full API: [`extensions/`](extensions/).
 
+---
+
 ## Skins
 
-The same shell-variable format Iris Terminal uses, so a skin written for one
-works in the other. Seven ship. The skin drives everything: window chrome,
-editor syntax colours, terminal palette, the ghost text, the run bar.
+<img src="docs/media/skins.png" alt="Nord, Olympus and Ember">
+<div align="center"><sub>Nord · Olympus · Ember — seven ship, and Paper is light</sub></div>
+
+The skin drives **everything**: window chrome, editor syntax colours, terminal
+palette, ghost text, the run bar. Eleven colours in a shell-variable file, the
+same format [Iris Terminal](https://github.com/HermesFoundry/iris-terminal)
+uses, so a skin written for either works in both.
 
 Drop more in `~/.config/prismstudio/themes/`, pick one in **Settings → Look**.
+
+---
+
+## Keys
+
+| | |
+|:--|:--|
+| `Ctrl+K` · `Ctrl+O` · `Ctrl+N` | open folder · open file · new file |
+| `Ctrl+S` · `Ctrl+Shift+S` | save · save as |
+| `Ctrl+W` · `Ctrl+Tab` | close file · next file |
+| `Ctrl+F` · `Ctrl+H` · `Ctrl+G` | find · replace · go to line |
+| `Ctrl+Shift+F` | search the workspace |
+| `Ctrl+Shift+P` | command palette |
+| `Ctrl+B` · `Ctrl+J` · `Ctrl+Shift+C` | side bar · panel · Claude |
+| `Ctrl+Shift+B` · `Shift+F5` · `Ctrl+Shift+L` | run · stop · open in browser |
+| `F5` | run just the open file |
+| `Ctrl+space` · `Ctrl+Shift+space` | suggest here · change source |
+| `Ctrl+I` · `Ctrl+Alt+A` | Claude change this · point Claude at this file |
+| `Tab` · `Esc` · `Alt+]` · `Ctrl+Right` | take · drop · cycle · take a word |
+
+Two presets — **standard** (what an editor user expects) and **reach** (the
+same set moved off the plain control keys). Rebind anything in
+**Settings → Keys**; it lands in `~/.config/prismstudio/keys.conf`.
+
+---
 
 ## Settings
 
 `~/.config/prismstudio/settings.conf`, shell-style `KEY=value`. Everything in
-Settings writes here and applies immediately.
+Settings writes here and applies immediately. Editing the file by hand keeps
+your comments and ordering.
 
 | | |
-|---|---|
+|:--|:--|
 | `THEME` `FONT` `UI_FONT` | skin and type |
 | `TAB_SIZE` `SPACES` `WRAP` `LINE_NUMBERS` `RIGHT_MARGIN` | the text |
 | `SUGGEST` `SUGGEST_MODEL` `SUGGEST_DELAY` | inline suggestions |
 | `AUTOSAVE` `FLUSH_FOR_CLAUDE` `TRIM_ON_SAVE` | saving |
-| `SIDEBAR` `PANEL` `ASSISTANT` and their sizes | layout |
+| `SIDEBAR` `PANEL` `ASSISTANT` + sizes | layout |
 | `RESTORE_SESSION` `CONFIRM_CLOSE` | on open and close |
 | `CLAUDE_CMD` `SHELL` `EXTENSIONS` | what it runs |
 
-Shortcuts live in `~/.config/prismstudio/keys.conf`. Two presets: `standard`
-(what an editor user expects) and `reach` (the same set moved off the plain
-control keys). Rebind any of them in **Settings → Keys**.
+---
 
 ## Checks
 
@@ -198,29 +258,39 @@ python3 tests/test_project.py     # what each kind of folder is detected as
 python3 tests/test_runbar.py      # install, run, find the address, stop
 ```
 
-283 checks. Each starts its own headless display on its own port and uses a
-private application id, so a running PrismStudio cannot swallow them.
-`test_runbar.py` really starts a server and really fetches from it, so it needs
-a free port and takes about half a minute.
+**283 checks.** They assert on the widget tree and on real behaviour rather
+than on pixels. `test_runbar.py` genuinely starts a server, fetches from it and
+checks the port closes afterwards, because every interesting bug in that path
+was a timing or integration bug a mock would have hidden.
+
+Each starts its own headless display on its own port and uses a private
+application id, so a running PrismStudio cannot answer for them, and each fails
+if it somehow ran zero checks.
+
+---
 
 ## Where things live
 
 | what | where |
-|---|---|
-| the app | `app/` |
+|:--|:--|
 | window, layout, actions | `app/main.py` |
-| settings, skins, colours | `app/core.py`, `app/styling.py` |
-| editor, ghost text, suggestions | `app/editor.py`, `app/inline.py`, `app/assist.py` |
-| tree, search, panel, Claude | `app/explorer.py`, `app/search.py`, `app/panel.py`, `app/assistant.py` |
-| detecting and running a project | `app/project.py`, `app/runbar.py`, `app/runner.py` |
-| extensions and the palette | `app/extensions.py`, `app/palette.py` |
+| settings, skins, colours | `app/core.py` · `app/styling.py` |
+| editor, ghost text, suggestions | `app/editor.py` · `app/inline.py` · `app/assist.py` |
+| tree, search, panel, Claude | `app/explorer.py` · `app/search.py` · `app/panel.py` · `app/assistant.py` |
+| detecting and running a project | `app/project.py` · `app/runbar.py` · `app/runner.py` |
+| extensions and the palette | `app/extensions.py` · `app/palette.py` |
 | skins | `themes/` |
-| settings | `~/.config/prismstudio/settings.conf` |
-| shortcuts | `~/.config/prismstudio/keys.conf` |
-| installed extensions | `~/.config/prismstudio/extensions/` |
+| settings · shortcuts · extensions | `~/.config/prismstudio/` |
 | session and recent folders | `~/.cache/prismstudio/state.json` |
 
-## Related
+---
 
-[Iris Terminal](https://github.com/HermesFoundry/iris-terminal) — the terminal
-this grew out of. They share the skin format; neither needs the other.
+<div align="center">
+<sub>
+
+Grew out of the code view inside
+**[Iris Terminal](https://github.com/HermesFoundry/iris-terminal)**.
+They share the skin format and nothing else; neither needs the other.
+
+</sub>
+</div>
