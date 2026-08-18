@@ -346,6 +346,9 @@ class Editor(Gtk.Box):
         self._lsp_timer = None
         self._local_timer = None
         self._claude_timer = None
+        self._copilot_timer = None
+        self._copilot_item = None       # the item Copilot last offered
+        self._copilot_note = ""         # why it had nothing, when it had nothing
         self._autosave_timer = None
         self._touched = None            # range Claude last changed, for the flash
 
@@ -921,6 +924,78 @@ class Editor(Gtk.Box):
 
         server.completion(doc.path, line, column, landed)
 
+    # -- copilot --------------------------------------------------------------
+    def request_copilot(self, automatic=True):
+        """Ask Copilot for ghost text at the cursor.
+
+        Answers that arrive after the buffer moved on are dropped, the same as
+        every other source: a suggestion for text you have already changed is
+        worse than none.
+        """
+        self._copilot_timer = None
+        doc = self.current
+        client = getattr(self.win, "copilot", None)
+        if doc is None or client is None or not doc.path:
+            return False
+        server = client.ensure()
+        if server is None:
+            kind, message = client.status()
+            if not automatic:
+                self.win.say(message or "Copilot is not available", bad=True)
+            return False
+        text = doc.buffer.get_text(doc.buffer.get_start_iter(),
+                                   doc.buffer.get_end_iter(), True)
+        language = self._language_id(doc)[0]
+
+        def sync():
+            if doc.path not in server.open_files:
+                server.open_document(doc.path, language, text)
+            else:
+                server.change_document(doc.path, text)
+
+        if server.ready:
+            sync()
+        else:
+            # didOpen before initialize lands is dropped on the floor
+            GLib.timeout_add(600, lambda: (sync(), False)[1])
+        it = doc.buffer.get_iter_at_mark(doc.buffer.get_insert())
+        line, column = it.get_line(), it.get_line_offset()
+        at = doc.revision
+
+        def landed(items, error):
+            if doc.revision != at or doc is not self.current:
+                return
+            if error:
+                if not automatic:
+                    self.win.say("Copilot: " + error, bad=True)
+                self._copilot_note = error
+                self._sync_hint()
+                return
+            self._copilot_note = ""
+            for item in items[:4]:
+                body = (item.get("insertText") or "").rstrip()
+                if not body:
+                    continue
+                self.ghost.add(assist.Suggestion(body, "copilot", "Copilot"))
+                server.shown(item)
+                self._copilot_item = item
+                break
+            self._sync_hint()
+
+        server.complete(doc.path, line, column, landed,
+                        tab_size=self.view.get_tab_width(),
+                        spaces=self.view.get_insert_spaces_instead_of_tabs(),
+                        automatic=automatic)
+        return False
+
+    def copilot_accepted(self):
+        """Copilot counts acceptances; staying silent skews its own model."""
+        item = getattr(self, "_copilot_item", None)
+        client = getattr(self.win, "copilot", None)
+        if item and client and client.server is not None:
+            client.server.accepted(item)
+        self._copilot_item = None
+
     # -- suggestions ----------------------------------------------------------
     def _typed(self, doc):
         """Something changed in the buffer: re-suggest, and maybe save."""
@@ -933,6 +1008,11 @@ class Editor(Gtk.Box):
         if self.suggest_mode == "claude":
             self._claude_timer = GLib.timeout_add(self.claude_delay,
                                                   lambda: self.request_claude(False))
+        elif self.suggest_mode == "copilot":
+            # Copilot answers in well under a second, so it can be asked much
+            # sooner than Claude without turning into a request per keystroke.
+            self._copilot_timer = GLib.timeout_add(
+                max(200, min(self.claude_delay, 500)), self.request_copilot)
         self.lsp_changed(doc)
         if self.autosave and doc.path:
             self._autosave_timer = GLib.timeout_add(AUTOSAVE_DELAY, self._autosave)
@@ -945,7 +1025,7 @@ class Editor(Gtk.Box):
         self._sync_status()
 
     def _drop_timers(self):
-        for name in ("_local_timer", "_claude_timer"):
+        for name in ("_local_timer", "_claude_timer", "_copilot_timer"):
             timer = getattr(self, name, None)
             if timer:
                 GLib.source_remove(timer)
@@ -1016,24 +1096,55 @@ class Editor(Gtk.Box):
                         os.path.dirname(doc.path) if doc.path else self.root, landed)
         return False
 
+    def suggest_order(self):
+        """The sources you can cycle through here, in a sensible order.
+
+        Claude is only offered when it is switched on, and Copilot only when
+        its language server is actually installed — cycling onto a source that
+        cannot answer is a dead stop with no explanation.
+        """
+        order = ["off", "local"]
+        if getattr(self.win, "assistant_enabled", True):
+            order.append("claude")
+        client = getattr(self.win, "copilot", None)
+        if client is not None and client.available():
+            order.append("copilot")
+        elif self.suggest_mode == "copilot":
+            order.append("copilot")          # already chosen; do not strand it
+        return order
+
     def cycle_suggest_mode(self):
-        order = ["off", "local", "claude"]
-        self.suggest_mode = order[(order.index(self.suggest_mode) + 1) % 3] \
-            if self.suggest_mode in order else "local"
+        order = self.suggest_order()
+        here = order.index(self.suggest_mode) if self.suggest_mode in order else -1
+        self.suggest_mode = order[(here + 1) % len(order)]
         self.ghost.clear()
         self._sync_assist_button()
         self.status_message({
             "off": "suggestions off",
             "local": "suggestions from this file only, instant",
             "claude": "Claude suggests after you pause — it takes a few seconds",
-        }[self.suggest_mode])
+            "copilot": "Copilot suggests as you type",
+        }.get(self.suggest_mode, ""))
+        if self.suggest_mode == "copilot":
+            self._warm_copilot()
         return self.suggest_mode
+
+    def _warm_copilot(self):
+        """Start the server now rather than on the next keystroke, and say
+        plainly if it cannot be started or is not signed in."""
+        client = getattr(self.win, "copilot", None)
+        if client is None:
+            return
+        if client.ensure() is None:
+            kind, message = client.status()
+            self.win.say("Copilot: " + (message or kind), bad=True)
 
     def _sync_assist_button(self):
         self.assist_btn.set_label({"off": "assist: off",
                                    "local": "assist: file",
-                                   "claude": "assist: Claude"}.get(self.suggest_mode,
-                                                                   "assist: file"))
+                                   "claude": "assist: Claude",
+                                   "copilot": "assist: Copilot"}.get(self.suggest_mode,
+                                                                     "assist: file"))
 
     def _sync_hint(self):
         item = self.ghost.item
@@ -1230,7 +1341,11 @@ class Editor(Gtk.Box):
         # the suggestion gets first refusal, the way Copilot does it
         if self.ghost.item is not None:
             if key == Gdk.KEY_Tab and not ctrl and not shift:
+                from_copilot = (self.ghost.item is not None
+                                and self.ghost.item.source == "copilot")
                 if self.ghost.accept():
+                    if from_copilot:
+                        self.copilot_accepted()
                     self._sync_hint()
                     return True
             if key == Gdk.KEY_Escape:

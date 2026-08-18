@@ -61,7 +61,7 @@ class Suggestion:
 
     def __init__(self, text, source, detail=""):
         self.text = text
-        self.source = source            # local | claude
+        self.source = source            # local | claude | copilot | lsp
         self.detail = detail            # shown in the status bar
 
     def __repr__(self):
