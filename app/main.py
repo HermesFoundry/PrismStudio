@@ -1071,6 +1071,18 @@ class PrismWindow(Gtk.ApplicationWindow):
         dialog.set_version(core.VERSION)
         dialog.set_comments("An editor with Claude beside it.\n"
                             "Skins, suggestions, projects and extensions.")
+        dialog.set_copyright(core.COPYRIGHT)
+        dialog.set_license_type(Gtk.License.MIT_X11)
+        dialog.set_website(core.HOMEPAGE)
+        dialog.set_website_label("github.com/HermesFoundry/PrismStudio")
+        # What it is standing on. People reporting a bug need these versions,
+        # and this is the one place they can find them without a terminal.
+        dialog.add_credit_section("Built on", [
+            "GTK %d.%d.%d" % (Gtk.get_major_version(), Gtk.get_minor_version(),
+                              Gtk.get_micro_version()),
+            "Python %d.%d.%d" % sys.version_info[:3],
+            "VTE %d.%d" % (Vte.MAJOR_VERSION, Vte.MINOR_VERSION),
+        ])
         shipped = os.path.join(core.ROOT, "packaging", "icons", "128.png")
         if os.path.exists(shipped):
             from gi.repository import GdkPixbuf

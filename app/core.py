@@ -15,6 +15,8 @@ HOME = os.path.expanduser("~")
 APP_NAME = "PrismStudio"
 APP_ID = "foundry.hermes.PrismStudio"
 VERSION = "1.0.0"
+HOMEPAGE = "https://github.com/HermesFoundry/PrismStudio"
+COPYRIGHT = "Copyright \u00a9 2026 Hermes Foundry"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
