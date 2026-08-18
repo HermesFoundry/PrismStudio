@@ -12,6 +12,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 
 SP = os.environ.get("IRIS_TEST_TMP", "/tmp/iris-tests")
 os.makedirs(SP, exist_ok=True)
@@ -364,12 +365,49 @@ def start():
             print("\n-- reopening restores what was open --")
             win.open_folder(PROJECT, restore=True)
             pump()
-            GLib.timeout_add_seconds(2, phase5)
+            GLib.timeout_add_seconds(2, phase_assistant)
         except Exception:
             import traceback
             traceback.print_exc()
             fails.append("exception in phase 4")
             app.quit()
+        return False
+
+    def phase_assistant():
+        """Opening files with the Claude pane live must stay cheap.
+
+        The pane is a terminal with a long-lived process in it, and the editor
+        saves the open file before Claude reads it. A screenshot harness once
+        made this look like the second file locked the window up at 100% CPU;
+        it was the harness driving the main loop from inside a timer, but the
+        cheapest way to know that stays true is to measure it.
+        """
+        try:
+            def cpu():
+                with open("/proc/self/stat") as handle:
+                    parts = handle.read().split()
+                return (int(parts[13]) + int(parts[14])) / os.sysconf("SC_CLK_TCK")
+
+            win.cfg["CLAUDE_CMD"] = os.environ.get("SHELL", "/bin/bash")
+            win.toggle_assistant(True)
+            pump()
+            check("the Claude pane is up", win.assistant is not None, True)
+
+            paths = [os.path.join(PROJECT, "src", n) for n in ("alpha.py", "beta.py")]
+            before, started = cpu(), time.time()
+            for path in paths + paths:          # open, and open again
+                win.open_file(path)
+                pump()
+            spent, wall = cpu() - before, max(0.001, time.time() - started)
+            check("opening files with the pane live does not spin the loop",
+                  spent / wall < 0.75, True)
+            check("and every one of them opened",
+                  len({d.path for d in win.editor.docs if d.path} & set(paths)), 2)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            fails.append("exception in the assistant phase")
+        GLib.timeout_add(200, phase5)
         return False
 
     def phase5():
