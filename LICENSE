@@ -1,0 +1,36 @@
+MIT License
+
+Copyright (c) 2026 Hermes Foundry
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+This licence covers the source, themes and documentation in this repository.
+
+PrismStudio bundles no third-party code. It imports GTK 3, VTE and
+GtkSourceView through PyGObject at runtime; those are separate works under the
+GNU LGPL, installed by your distribution and not redistributed here. It can
+optionally drive three external programs, none of which are included and each
+of which is under its own terms: the `claude` CLI, the GitHub CLI (`gh`), and
+`@github/copilot-language-server`.
+
+The application icon (`packaging/icons/`, `docs/media/icon.png`) is artwork
+supplied by the project owner and is not covered by the grant above; treat it
+as all rights reserved unless told otherwise.
