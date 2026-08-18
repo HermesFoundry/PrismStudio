@@ -42,7 +42,7 @@ DEFAULTS = {
     "RIGHT_MARGIN": "0",        # column to draw a guide at, 0 for none
 
     # layout
-    "SIDEBAR": "explorer",      # explorer | search | run | extensions | off
+    "SIDEBAR": "explorer",      # explorer | search | git | run | extensions | off
     "SIDEBAR_WIDTH": "240",
     "PANEL": "0",               # bottom panel open at startup
     "PANEL_HEIGHT": "220",
@@ -56,10 +56,13 @@ DEFAULTS = {
     "RESTORE_SESSION": "1",
 
     # the assistant
-    "SUGGEST": "local",         # off | local | claude
+    "CLAUDE": "1",              # master switch: 0 removes every Claude feature
+    "SUGGEST": "local",         # off | local | claude | copilot
     "SUGGEST_MODEL": "haiku",
     "SUGGEST_DELAY": "1200",
     "CLAUDE_CMD": "claude",
+    "COPILOT_CMD": "copilot-language-server",
+    "SELECTION_BAR": "1",       # the little popup when you highlight something
     "SHELL": os.environ.get("SHELL", "/bin/bash"),
 
     # the rest

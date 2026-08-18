@@ -34,10 +34,13 @@ from explorer import Explorer, choose_file, choose_folder, icon_button  # noqa: 
 from panel import Panel  # noqa: E402
 from runbar import RunBar  # noqa: E402
 from search import SearchPanel  # noqa: E402
+from selection import SelectionBar  # noqa: E402
+from sourcecontrol import SourceControl  # noqa: E402
 
 ACTIVITIES = [
     ("explorer", "folder-symbolic", "E", "Explorer   Ctrl+Shift+E"),
     ("search", "system-search-symbolic", "S", "Search   Ctrl+Shift+F"),
+    ("git", "media-playlist-shuffle-symbolic", "G", "Source control   Ctrl+Shift+G"),
     ("run", "media-playback-start-symbolic", "R", "Run   Ctrl+Shift+D"),
     ("extensions", "application-x-addon-symbolic", "X", "Extensions   Ctrl+Shift+X"),
 ]
@@ -88,6 +91,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         # ---- side bar --------------------------------------------------------
         self.explorer = Explorer(self)
         self.search = SearchPanel(self)
+        self.git = SourceControl(self)
         self.run_side = self._build_run_side()
         self.extensions_side = self._build_extensions_side()
 
@@ -103,6 +107,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.side_stack = Gtk.Stack()
         self.side_stack.add_named(self.explorer, "explorer")
         self.side_stack.add_named(self.search, "search")
+        self.side_stack.add_named(self.git, "git")
         self.side_stack.add_named(self.run_side, "run")
         self.side_stack.add_named(self.extensions_side, "extensions")
 
@@ -115,6 +120,8 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.editor = Editor(self, None, self.say_from_editor)
         self.editor.on_saved = self.file_saved
         self.editor.on_ask = self.point_claude_at
+        self.selection = (SelectionBar(self, self.editor)
+                          if self.cfg.get("SELECTION_BAR", "1") == "1" else None)
         self.runbar = RunBar(self)
         self.panel = Panel(self)
 
@@ -161,6 +168,15 @@ class PrismWindow(Gtk.ApplicationWindow):
             self._sync_title()
             self.editor.show_welcome_if_empty()
 
+    @property
+    def assistant_enabled(self):
+        """Whether any Claude feature is offered at all.
+
+        Off means off: no pane, no menu, no palette entries, no Claude tier in
+        the suggestions, and nothing on the selection bar that would need it.
+        """
+        return self.cfg.get("CLAUDE", "1") == "1"
+
     # ---------------------------------------------------------------------- #
     # chrome
     # ---------------------------------------------------------------------- #
@@ -192,7 +208,8 @@ class PrismWindow(Gtk.ApplicationWindow):
                       ("Search the workspace…", "search"), None,
                       ("Go to line…", "go-to-line")])
         menu("View", [("Explorer", "side-explorer"), ("Search", "side-search"),
-                      ("Run", "side-run"), ("Extensions", "side-extensions"), None,
+                      ("Source control", "side-git"), ("Run", "side-run"),
+                      ("Extensions", "side-extensions"), None,
                       ("Toggle side bar", "toggle-sidebar"),
                       ("Toggle panel", "toggle-panel"),
                       ("Toggle Claude", "toggle-assistant"), None,
@@ -200,15 +217,21 @@ class PrismWindow(Gtk.ApplicationWindow):
                       ("Keyboard shortcuts", "keymap"), None,
                       ("Bigger text", "zoom-in"), ("Smaller text", "zoom-out"),
                       ("Reset text size", "zoom-reset"), ("Full screen", "fullscreen")])
+        menu("Git", [("Commit", "git-commit"), ("Sync", "git-sync"), None,
+                     ("Refresh", "git-refresh")])
         menu("Run", [("Run the app", "run-app"), ("Stop", "stop-app"),
                      ("Open in the browser", "open-app"), None,
                      ("Run this file", "run-file"), None,
                      ("New terminal", "new-terminal")])
-        menu("Claude", [("Suggest here", "suggest"),
-                        ("Change suggestion source", "suggest-mode"), None,
-                        ("Have Claude change this…", "claude-edit"),
-                        ("Point Claude at this file", "ask-claude"), None,
-                        ("Restart Claude", "restart-claude")])
+        if self.assistant_enabled:
+            menu("Claude", [("Suggest here", "suggest"),
+                            ("Change suggestion source", "suggest-mode"), None,
+                            ("Have Claude change this…", "claude-edit"),
+                            ("Point Claude at this file", "ask-claude"), None,
+                            ("Restart Claude", "restart-claude")])
+        else:
+            menu("Assist", [("Suggest here", "suggest"),
+                            ("Change suggestion source", "suggest-mode")])
         menu("Help", [("Keyboard shortcuts", "keymap"), ("About", "about")])
         self.header.pack_start(bar)
 
@@ -340,17 +363,21 @@ class PrismWindow(Gtk.ApplicationWindow):
 
     def _apply_sizes(self):
         self.toggle_panel(self.cfg.get("PANEL", "0") == "1", False)
-        self.toggle_assistant(self.cfg.get("ASSISTANT", "1") == "1", False)
+        self.toggle_assistant(self.assistant_enabled
+                              and self.cfg.get("ASSISTANT", "1") == "1", False)
+        self.assist_toggle.set_visible(self.assistant_enabled)
         return False
 
     def show_side(self, name):
         self.side_stack.set_visible_child_name(name)
-        self.side_title.set_text(name.upper())
+        self.side_title.set_text("SOURCE CONTROL" if name == "git" else name.upper())
         self.sidebar.show()
         if name == "search":
             self.search.focus()
         elif name == "extensions":
             self._sync_extensions_side()
+        elif name == "git":
+            self.git.refresh()
         elif name == "run":
             self._sync_run_side()
         self.cfg["SIDEBAR"] = name
@@ -386,6 +413,9 @@ class PrismWindow(Gtk.ApplicationWindow):
         return True
 
     def toggle_assistant(self, on=None, remember=True):
+        if not self.assistant_enabled:
+            self.assistant.hide()
+            return False
         want = (not self.assistant.get_visible()) if on is None else on
         self.assistant.set_visible(want)
         if want:
@@ -419,6 +449,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.editor.root = path
         self.explorer.set_root(path)
         self.search.set_folder(path)
+        self.git.set_root(path)
         workspace.remember_folder(path)
         self.runbar.rescan()
         self._sync_run_side()
@@ -441,6 +472,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.editor.root = None
         self.explorer.set_root(None)
         self.search.set_folder(None)
+        self.git.set_root(None)
         self.runbar.rescan()
         self._sync_title()
         self.say("closed the folder")
@@ -457,6 +489,8 @@ class PrismWindow(Gtk.ApplicationWindow):
 
     def file_saved(self, path):
         self.explorer.reveal(path)
+        if self.side_stack.get_visible_child_name() == "git":
+            self.git.refresh()
         if os.path.basename(path) in ("package.json", "requirements.txt",
                                       "pyproject.toml", "Cargo.toml", "go.mod",
                                       "composer.json", "Gemfile", "Makefile"):
@@ -665,11 +699,15 @@ class PrismWindow(Gtk.ApplicationWindow):
             "search": self.focus_search,
             "side-explorer": lambda: self._side("explorer"),
             "side-search": lambda: self._side("search"),
+            "side-git": lambda: self._side("git"),
             "side-run": lambda: self._side("run"),
             "side-extensions": lambda: self._side("extensions"),
             "toggle-sidebar": self.toggle_sidebar,
             "toggle-panel": lambda: self.toggle_panel(),
             "toggle-assistant": lambda: self.toggle_assistant(),
+            "git-commit": lambda: (self._side("git"), self.git.commit(), True)[2],
+            "git-sync": lambda: (self._side("git"), self.git.sync(), True)[2],
+            "git-refresh": lambda: (self.git.refresh(), True)[1],
             "new-terminal": lambda: (self.toggle_panel(True),
                                      self.panel.new_terminal(), True)[2],
             "palette": self.show_palette,
@@ -688,13 +726,22 @@ class PrismWindow(Gtk.ApplicationWindow):
             "run-file": self.run_file,
             "suggest": lambda: (editor.request_claude(True), True)[1],
             "suggest-mode": lambda: (editor.cycle_suggest_mode(), True)[1],
-            "claude-edit": lambda: (editor.editbar.open(), True)[1],
+            "claude-edit": self.claude_edit,
             "ask-claude": lambda: (editor.ask_claude(), True)[1],
             "restart-claude": lambda: (self.toggle_assistant(True),
                                        self.assistant.restart(), True)[2],
             "new-window": self.new_window,
         }
         return self._actions
+
+    def claude_edit(self):
+        if not self.assistant_enabled:
+            self.say("Claude is switched off in settings")
+            return True
+        if self.selection:
+            self.selection.suppress(True)
+        self.editor.editbar.open()
+        return True
 
     def _side(self, name):
         self.sidebar.show()
@@ -767,9 +814,13 @@ class PrismWindow(Gtk.ApplicationWindow):
     def all_commands(self):
         out = []
         actions = self.actions()
+        claude_only = {"claude-edit", "ask-claude", "restart-claude",
+                       "toggle-assistant"}
         for ident, label, group, _default, _alt in keymap.ACTIONS:
             handler = actions.get(ident)
             if handler is None:
+                continue
+            if ident in claude_only and not self.assistant_enabled:
                 continue
             out.append(extensions.Command(ident, "%s: %s" % (group, label),
                                           handler, "prism", self.km.accel_for(ident)))
