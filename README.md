@@ -10,7 +10,7 @@ GTK3, Python, native. No Electron, no browser, no telemetry.
 <img src="https://img.shields.io/badge/GTK-3-4fb3ff?style=flat-square" alt="GTK 3">
 <img src="https://img.shields.io/badge/Python-3.10%2B-3ddc97?style=flat-square" alt="Python 3.10+">
 <img src="https://img.shields.io/badge/Linux-desktop%20app-f0a848?style=flat-square" alt="Linux desktop app">
-<img src="https://img.shields.io/badge/tests-357%20checks-b48ead?style=flat-square" alt="357 checks">
+<img src="https://img.shields.io/badge/tests-410%20checks-b48ead?style=flat-square" alt="410 checks">
 <img src="https://img.shields.io/badge/version-1.0.0-8fbcbb?style=flat-square" alt="version 1.0.0">
 
 <br>
@@ -74,6 +74,7 @@ Two sources, and they are honestly different:
 |:--|:--|:--|
 | **file** | words and whole lines you already have open | instant, offline |
 | **Claude** | the `claude` command, asked to fill in at the cursor | about ten seconds |
+| **Copilot** | `@github/copilot-language-server`, if installed | under a second |
 
 Ten seconds is not a per-keystroke completion and PrismStudio does not pretend
 otherwise. The Claude tier runs **after you stop typing**, on a thread, and its
@@ -194,6 +195,72 @@ Two worked examples and the full API: [`extensions/`](extensions/).
 
 ---
 
+## GitHub, without leaving the editor
+
+<table>
+<tr>
+<td width="50%"><img src="docs/media/clone.png" alt="Clone a repository"></td>
+<td width="50%"><img src="docs/media/github.png" alt="GitHub settings"></td>
+</tr>
+</table>
+
+**Clone** (`Ctrl+Shift+P` → *Clone a repository*, or the button on an empty
+Explorer) takes a URL, or lists your own repositories once you are signed in,
+and works out the destination folder for you. It runs `git clone` **in the
+terminal panel** where you can watch it, notices when it finishes, and offers
+to open what arrived.
+
+**Publish** puts the folder you have open on GitHub, sets `origin` and pushes,
+also in the terminal. A repository with no remote says so in the Source
+control panel and offers the button.
+
+Signing in is `gh auth login`'s device flow, run in the terminal so you can see
+the code and what it is asking for. **PrismStudio never handles your token**:
+`gh` owns it and keeps it in the system keyring, and the only things read back
+out are your account name, the host and the git protocol. There is no
+`--show-token` anywhere in this codebase.
+
+**SSH keys** are in **Settings → GitHub**: what is on your account, what is on
+this machine, a button to make a new key, one to upload a `.pub`, and *Test the
+connection*, which asks `github.com` whether it recognises you and tells you
+what it said.
+
+> Full VS Code style **Remote-SSH** — editing files on another machine — is not
+> here. Cloning, publishing and pushing over SSH are.
+
+---
+
+## Copilot
+
+<img src="docs/media/copilot.png" alt="Copilot in the assist button">
+
+`SUGGEST=copilot` used to be a setting with nothing behind it. Now it drives
+[`@github/copilot-language-server`](https://www.npmjs.com/package/@github/copilot-language-server),
+the same server the official editor plugins use:
+
+```sh
+npm install -g @github/copilot-language-server
+```
+
+Then cycle the **assist:** button, or `Ctrl+Shift+space`, until it reads
+*Copilot*. Suggestions arrive as the same ghost text everything else uses,
+`Tab` takes them, and acceptance is reported back so Copilot's own statistics
+are not skewed by an editor that never says anything.
+
+Sign in from **Settings → GitHub → Sign in to Copilot**: a device code, copied
+to your clipboard, and a button that opens the page.
+
+Copilot is a paid GitHub product. Being signed in to `gh` is **not** the same
+as having a subscription, and the server says so plainly rather than going
+quiet — a signed-out or unsubscribed account produces *not signed in to
+Copilot* or *this GitHub account has no Copilot subscription* on the status
+bar, never an empty suggestion you are left to interpret.
+
+The source only appears in the cycle when the language server is actually
+installed, so it is never possible to switch to a source that cannot answer.
+
+---
+
 ## It tells you when there is a new one
 
 <div align="center">
@@ -294,6 +361,7 @@ your comments and ordering.
 | `SUGGEST` `SUGGEST_MODEL` `SUGGEST_DELAY` | inline suggestions |
 | `AUTOSAVE` `FLUSH_FOR_CLAUDE` `TRIM_ON_SAVE` | saving |
 | `SIDEBAR` `PANEL` `ASSISTANT` + sizes | layout |
+| `GIT_PROTOCOL` `COPILOT_CMD` | GitHub and Copilot |
 | `RESTORE_SESSION` `CONFIRM_CLOSE` | on open and close |
 | `CLAUDE_CMD` `SHELL` `EXTENSIONS` | what it runs |
 | `UPDATE_CHECK` `UPDATE_URL` `UPDATE_INTERVAL` | looking for new versions |
@@ -310,9 +378,11 @@ python3 tests/test_project.py     # what each kind of folder is detected as
 python3 tests/test_runbar.py      # install, run, find the address, stop
 python3 tests/test_lsp.py         # language servers: diagnostics, completion
 python3 tests/test_updates.py     # version compare, the throttle, staying quiet
+python3 tests/test_github.py      # clone for real, publish, never touch a token
+python3 tests/test_copilot.py     # the Copilot handshake, against the real server
 ```
 
-**357 checks.** They assert on the widget tree and on real behaviour rather
+**410 checks.** They assert on the widget tree and on real behaviour rather
 than on pixels. `test_runbar.py` genuinely starts a server, fetches from it and
 checks the port closes afterwards, because every interesting bug in that path
 was a timing or integration bug a mock would have hidden.
@@ -334,6 +404,7 @@ if it somehow ran zero checks.
 | detecting and running a project | `app/project.py` · `app/runbar.py` · `app/runner.py` |
 | extensions and the palette | `app/extensions.py` · `app/palette.py` |
 | language servers, git, updates | `app/lsp.py` · `app/gitrepo.py` · `app/updates.py` |
+| GitHub, cloning, Copilot | `app/github.py` · `app/clone.py` · `app/copilot.py` |
 | skins | `themes/` |
 | settings · shortcuts · extensions | `~/.config/prismstudio/` |
 | session and recent folders | `~/.cache/prismstudio/state.json` |
