@@ -14,6 +14,7 @@ import subprocess
 HOME = os.path.expanduser("~")
 APP_NAME = "PrismStudio"
 APP_ID = "foundry.hermes.PrismStudio"
+VERSION = "1.0.0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
@@ -64,6 +65,11 @@ DEFAULTS = {
     "COPILOT_CMD": "copilot-language-server",
     "SELECTION_BAR": "1",       # the little popup when you highlight something
     "SHELL": os.environ.get("SHELL", "/bin/bash"),
+
+    # updates
+    "UPDATE_CHECK": "1",        # look for a new version when the app starts
+    "UPDATE_URL": "https://hermesarcade.co.za/prismstudio/updates.json",
+    "UPDATE_INTERVAL": "20",    # hours between checks
 
     # the rest
     "LSP": "1",                 # use language servers found on your PATH
