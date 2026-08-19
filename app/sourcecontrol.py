@@ -15,6 +15,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk, Pango  # noqa: E402
 
+import core  # noqa: E402
 import gitrepo  # noqa: E402
 from explorer import ask_text, icon_button  # noqa: E402
 
@@ -92,6 +93,9 @@ class SourceControl(Gtk.Box):
         self.refresh()
 
     def refresh(self):
+        # The status bar's branch is remembered for a few seconds; anything
+        # that refreshes this panel is a moment where it may really have moved.
+        core.forget_git_branch(self.repo.root)
         for child in self.body.get_children():
             self.body.remove(child)
         if not self.repo.root:

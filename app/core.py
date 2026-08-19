@@ -10,11 +10,12 @@ for one works in the other.
 import os
 import re
 import subprocess
+import time
 
 HOME = os.path.expanduser("~")
 APP_NAME = "PrismStudio"
 APP_ID = "foundry.hermes.PrismStudio"
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 HOMEPAGE = "https://github.com/HermesFoundry/PrismStudio"
 COPYRIGHT = "Copyright \u00a9 2026 Hermes Foundry"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -53,7 +54,7 @@ DEFAULTS = {
     # exists until you ask for one, and where it opens is yours to choose.
     "ASSISTANT": "0",           # open Claude at startup
     "ASSISTANT_WIDTH": "420",   # when it opens beside the editor
-    "CLAUDE_PLACE": "panel",    # panel | side | window
+    "CLAUDE_PLACE": "float",    # float | panel | side | window
 
     # editing
     "AUTOSAVE": "0",
@@ -288,13 +289,35 @@ def short_path(path, root=None):
     return path
 
 
-def git_branch(folder):
+# Asking git which branch you are on means forking a process, and the status
+# bar wants the answer far more often than the answer changes. It is worth
+# remembering for a couple of seconds; `forget_git_branch` is there for the
+# moments when it really has just changed.
+_BRANCH_CACHE = {}
+BRANCH_MAX_AGE = 3.0
+
+
+def forget_git_branch(folder=None):
+    if folder is None:
+        _BRANCH_CACHE.clear()
+    else:
+        _BRANCH_CACHE.pop(folder, None)
+
+
+def git_branch(folder, max_age=BRANCH_MAX_AGE):
     """The current branch, or empty if this is not a repository."""
     if not folder or not os.path.isdir(folder):
         return ""
+    got = _BRANCH_CACHE.get(folder)
+    now = time.monotonic()
+    if got and (now - got[0]) < max_age:
+        return got[1]
     try:
         done = subprocess.run(["git", "-C", folder, "rev-parse", "--abbrev-ref", "HEAD"],
                               capture_output=True, text=True, timeout=2)
     except (OSError, subprocess.SubprocessError):
+        _BRANCH_CACHE[folder] = (now, "")
         return ""
-    return done.stdout.strip() if done.returncode == 0 else ""
+    branch = done.stdout.strip() if done.returncode == 0 else ""
+    _BRANCH_CACHE[folder] = (now, branch)
+    return branch

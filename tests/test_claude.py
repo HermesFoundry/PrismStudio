@@ -119,6 +119,25 @@ def start():
             check("the setting agrees that it starts closed",
                   core.DEFAULTS["ASSISTANT"], "0")
 
+            print("\n-- floating over the editor, the default --")
+            check("the default place is floating",
+                  core.DEFAULTS["CLAUDE_PLACE"], "float")
+            win.cfg["CLAUDE_PLACE"] = "float"
+            win.show_claude(focus=False, remember=False)
+            pump()
+            check("it is on screen", win.claude_showing(), True)
+            check("in a window of its own", win.claude_window is not None, True)
+            check("which is undecorated, so it reads as an overlay",
+                  win.claude_window.get_decorated(), False)
+            check("and nothing in the layout moved: the panel stayed shut",
+                  win.panel.get_visible(), False)
+            check("nor did a pane appear beside the editor",
+                  win.assistant.get_parent() is not win.middle, True)
+            win.hide_claude(remember=False)
+            pump()
+            check("Escape-and-gone leaves nothing behind",
+                  win.claude_showing() or win.claude_window is not None, False)
+
             print("\n-- summoned into the bottom panel --")
             win.cfg["CLAUDE_PLACE"] = "panel"
             win.show_claude(focus=False, remember=False)
@@ -217,6 +236,20 @@ def start():
             check("a : asks for a line", box.mode(), ("line", "42"))
             check("and offers exactly that", box.shown[0].label, "Go to line 42")
             box.destroy()
+
+            print("\n-- Ctrl+Tab goes back, not along --")
+            here = os.path.join(PROJECT, "src", "main.py")
+            there = os.path.join(PROJECT, "src", "helper.py")
+            third = os.path.join(PROJECT, "docs", "notes.txt")
+            for path in (here, there, third):
+                win.editor.open(path)
+            pump()
+            check("three files open", len(win.editor.docs) >= 3, True)
+            check("sitting in the last one", win.editor.path, third)
+            win.editor.recent_file()
+            check("Ctrl+Tab goes back to the one before", win.editor.path, there)
+            win.editor.recent_file()
+            check("and again bounces back, not onward", win.editor.path, third)
 
             print("\n-- the editor only reads what it needs --")
             win.editor.new_file()

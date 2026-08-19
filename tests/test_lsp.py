@@ -9,6 +9,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, os.path.expanduser("~/PrismStudio/app"))
 
@@ -74,7 +75,24 @@ else:
         state.setdefault("diags", items)
 
     live = lsp.Client(root, on_diagnostics=on_diag)
-    server = live.server_for("python3")
+    # Servers boot on a thread now — asking for one starts it and answers None
+    # until it is up, so that the editor never freezes on a fork. Wait for it
+    # the way the editor does: by being told.
+    context = GLib.MainContext.default()
+    live.server_for("python3")
+    for _ in range(120):
+        if live.server_for("python3", start=False) is not None:
+            break
+        while context.pending():
+            context.iteration(False)
+        time.sleep(0.05)
+    server = live.server_for("python3", start=False)
+    if server is None:
+        # It should have landed by now; if the machine is slow, start one the
+        # blocking way so the round trip below is still checked.
+        server = lsp.Server(name, argv, root, live._diagnostics, live.on_log)
+        server.start()
+        live.servers["python3"] = server
     check("the server started", server is not None and server.alive(), True)
 
     def opened():

@@ -13,7 +13,9 @@ gi.require_version("GtkSource", "4")
 from gi.repository import Gdk, Gio, GLib, GtkSource, Gtk, Pango  # noqa: E402
 
 import assist  # noqa: E402
+import badges  # noqa: E402
 import core  # noqa: E402
+import explorer as explorer_mod  # noqa: E402
 import inline  # noqa: E402
 import lsp  # noqa: E402
 import sourcestyle  # noqa: E402
@@ -274,6 +276,8 @@ class FindBar(Gtk.Revealer):
 
 
 class Editor(Gtk.Box):
+    _status_pending = None              # set before anything can schedule one
+
     def __init__(self, win, root, on_status, on_run=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.win = win
@@ -367,6 +371,8 @@ class Editor(Gtk.Box):
         self._copilot_item = None       # the item Copilot last offered
         self._copilot_note = ""         # why it had nothing, when it had nothing
         self._autosave_timer = None
+        self._status_pending = None     # one status bar per burst, not per mark
+        self._recent = []               # documents in most-recently-used order
         self._touched = None            # range Claude last changed, for the flash
 
         # ---- nothing open ---------------------------------------------------
@@ -423,28 +429,61 @@ class Editor(Gtk.Box):
 
     # -- welcome --------------------------------------------------------------
     def _build_welcome(self):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        """The empty state: two columns, because it has two jobs.
+
+        On the left, the ways in — the things you came here to do. On the
+        right, where you were last time. The keyboard strip along the bottom is
+        the part you stop reading after a week, so it is the quietest thing on
+        the page rather than the longest.
+        """
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.set_halign(Gtk.Align.CENTER)
         box.set_valign(Gtk.Align.CENTER)
+
         title = Gtk.Label()
-        title.set_markup("<span size='xx-large' weight='bold'>PrismStudio</span>")
+        title.set_markup("<span size='24000' weight='bold'>PrismStudio</span>")
+        title.set_xalign(0.0)
         title.get_style_context().add_class("welcometitle")
         box.pack_start(title, False, False, 0)
+        blurb = Gtk.Label(label="An editor with Claude beside it — when you ask for it.")
+        blurb.set_xalign(0.0)
+        blurb.get_style_context().add_class("welcomesub")
+        box.pack_start(blurb, False, False, 2)
 
-        invite = Gtk.Label(label="double-click anywhere to start writing")
-        invite.get_style_context().add_class("welcomeinvite")
-        box.pack_start(invite, False, False, 4)
+        columns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=54)
+        columns.set_margin_top(26)
+        box.pack_start(columns, False, False, 0)
 
-        for keys, what in (("Ctrl+K", "open a folder"), ("Ctrl+O", "open a file"),
-                           ("Ctrl+N", "new file"), ("Ctrl+Shift+P", "command palette"),
-                           ("Ctrl+Shift+F", "search the workspace"),
-                           ("Ctrl+Shift+B", "run the app"), ("Ctrl+J", "terminal"),
-                           ("Ctrl+I", "have Claude change something")):
+        start = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        start.pack_start(self._welcome_heading("START"), False, False, 0)
+        for label, action in (("Open a folder", "open-folder"),
+                              ("Open a file", "open-file"),
+                              ("New file", "new-file"),
+                              ("Clone a repository", "git-clone")):
+            link = Gtk.Button(label=label)
+            link.set_relief(Gtk.ReliefStyle.NONE)
+            link.set_halign(Gtk.Align.START)
+            link.get_style_context().add_class("welcomeaction")
+            link.set_tooltip_text(self.win.km.accel_for(action) or "")
+            link.connect("clicked", (lambda a: lambda *_: self.win.do_action(a))(action))
+            start.pack_start(link, False, False, 0)
+        columns.pack_start(start, False, False, 0)
+
+        self.welcome_recent = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        self.welcome_recent.pack_start(self._welcome_heading("RECENT"), False, False, 0)
+        columns.pack_start(self.welcome_recent, False, False, 0)
+
+        keys = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=18)
+        keys.set_margin_top(34)
+        keys.set_halign(Gtk.Align.START)
+        for combo, what in (("Ctrl+P", "go to file"), ("Ctrl+Shift+P", "commands"),
+                            ("Ctrl+J", "terminal"), ("Ctrl+Shift+C", "Claude")):
             row = Gtk.Label()
-            row.set_markup("<span font_family='monospace'>%s</span>   %s" % (keys, what))
-            row.set_xalign(0.0)
+            row.set_markup("<span font_family='monospace'>%s</span>  %s"
+                           % (GLib.markup_escape_text(combo), what))
             row.get_style_context().add_class("welcomerow")
-            box.pack_start(row, False, False, 0)
+            keys.pack_start(row, False, False, 0)
+        box.pack_start(keys, False, False, 0)
 
         # A Gtk.Box has no window of its own and never sees a click, so the
         # whole welcome sits in an event box. It fills the stack rather than
@@ -460,6 +499,39 @@ class Editor(Gtk.Box):
         self.welcome_box = box
         return catcher
 
+    @staticmethod
+    def _welcome_heading(text):
+        label = Gtk.Label(label=text)
+        label.set_xalign(0.0)
+        label.get_style_context().add_class("welcomehead")
+        label.set_margin_bottom(4)
+        return label
+
+    def sync_welcome_recent(self):
+        """The recent folders, refreshed whenever the empty state is shown."""
+        box = getattr(self, "welcome_recent", None)
+        if box is None:
+            return
+        for child in box.get_children()[1:]:
+            box.remove(child)
+        import workspace
+        folders = workspace.recent_folders()[:5]
+        if not folders:
+            empty = Gtk.Label(label="nothing yet")
+            empty.set_xalign(0.0)
+            empty.get_style_context().add_class("welcomerow")
+            box.pack_start(empty, False, False, 0)
+        for folder in folders:
+            link = Gtk.Button(label=workspace.name_for(folder))
+            link.set_relief(Gtk.ReliefStyle.NONE)
+            link.set_halign(Gtk.Align.START)
+            link.set_tooltip_text(folder)
+            link.get_style_context().add_class("welcomeaction")
+            link.connect("clicked",
+                         (lambda f: lambda *_: self.win.open_folder(f))(folder))
+            box.pack_start(link, False, False, 0)
+        box.show_all()
+
     def _welcome_clicked(self, _widget, event):
         """Double-click the empty state to get straight into a new file."""
         if event.type == Gdk.EventType._2BUTTON_PRESS and event.button == 1:
@@ -468,6 +540,7 @@ class Editor(Gtk.Box):
         return False
 
     def _show_welcome(self):
+        self.sync_welcome_recent()
         self.welcome.show_all()
         self.stack.set_visible_child(self.welcome)
         self.save_btn.set_sensitive(False)
@@ -555,7 +628,7 @@ class Editor(Gtk.Box):
     def _add(self, doc, focus):
         doc.buffer.connect("modified-changed", lambda *_: self._sync_tabs())
         doc.buffer.connect("changed", lambda *_: self._typed(doc))
-        doc.buffer.connect("mark-set", lambda *a: self._cursor_moved())
+        doc.buffer.connect("mark-set", self._mark_set)
         self.docs.append(doc)
         self.switch(doc, focus)
 
@@ -597,6 +670,11 @@ class Editor(Gtk.Box):
         self.view.set_editable(not getattr(doc, "virtual", False))
         self.ghost.clear()
         self._drop_timers()
+        if self.current is not None and self.current is not doc:
+            # most recently used, so Ctrl+Tab can bounce between the two files
+            # you are actually working in rather than walking the whole strip
+            self._recent = [self.current] + [d for d in self._recent
+                                             if d is not self.current][:8]
         self.current = doc
         self.view.set_buffer(doc.buffer)
         self.editing.show_all()
@@ -607,6 +685,14 @@ class Editor(Gtk.Box):
         self._sync_status()
         if focus:
             self.view.grab_focus()
+
+    def recent_file(self):
+        """Back to the file you were in before this one."""
+        for doc in self._recent:
+            if doc in self.docs and doc is not self.current:
+                self.switch(doc)
+                return True
+        return self.cycle(1)
 
     def close_doc(self, doc=None):
         doc = doc or self.current
@@ -704,10 +790,13 @@ class Editor(Gtk.Box):
         for child in self.tabs.get_children():
             self.tabs.remove(child)
         for doc in self.docs:
-            tab = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            tab = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             tab.get_style_context().add_class("edtab")
             if doc is self.current:
                 tab.get_style_context().add_class("active")
+            tile = badges.badge(badges.letters_for(doc.name), self._tab_tint(doc.name))
+            if tile is not None:
+                tab.pack_start(Gtk.Image.new_from_pixbuf(tile), False, False, 0)
             label = Gtk.Label(label=doc.name + (" ●" if doc.buffer.get_modified() else ""))
             label.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
             label.set_max_width_chars(20)
@@ -725,6 +814,19 @@ class Editor(Gtk.Box):
         self.save_btn.set_sensitive(bool(self.current and (self.current.buffer.get_modified()
                                                            or not self.current.path)))
 
+    def _tab_tint(self, name):
+        """The same family colour the tree uses, so a tab and its row match."""
+        theme = self.win.theme
+        kind = explorer_mod.file_kind(name)
+        key = explorer_mod.KINDS.get(kind, (None,))[0]
+        base = {"ACCENT": theme["ACCENT"], "ACCENT2": theme["ACCENT2"],
+                "OK": theme["OK"],
+                "MARKUP": core.mix(theme["ACCENT2"], theme["ACCENT"], 0.5),
+                "MEDIA": core.mix(theme["ACCENT"], theme["URGENT"], 0.5)}.get(key)
+        if base is None:
+            return core.mix(theme["PANEL"], theme["FG"], 0.55)
+        return core.mix(theme["PANEL"], base, 0.72)
+
     def _tab_clicked(self, doc, event):
         if event.button == 2:
             self.close_doc(doc)
@@ -733,7 +835,7 @@ class Editor(Gtk.Box):
         return True
 
     # -- status ---------------------------------------------------------------
-    def _sync_status(self):
+    def _write_status(self):
         doc = self.current
         if doc is None:
             return
@@ -819,6 +921,21 @@ class Editor(Gtk.Box):
         server = self.lsp.server_for(ident)
         if server:
             server.did_open(doc.path, wire, doc.text())
+        # else it is still booting; lsp_server_ready hands it the file then
+
+    def lsp_server_ready(self, language):
+        """A server finished starting: give it everything already open in it."""
+        if self.lsp is None:
+            return
+        server = self.lsp.server_for(language, start=False)
+        if server is None:
+            return
+        for doc in self.docs:
+            if not doc.path:
+                continue
+            ident, wire = self._language_id(doc)
+            if ident == language:
+                server.did_open(doc.path, wire, doc.text())
 
     def lsp_close(self, doc):
         if self.lsp is None or not doc.path:
@@ -1070,11 +1187,34 @@ class Editor(Gtk.Box):
             self._autosave_timer = GLib.timeout_add(AUTOSAVE_DELAY, self._autosave)
         self._sync_hint()
 
+    def _mark_set(self, _buffer, _iter, mark):
+        """Loading a file moves marks hundreds of times; only the cursor counts.
+
+        GTK emits mark-set for every mark in the buffer, including the ones the
+        search context and the highlighter move about. Reacting to all of them
+        meant a status bar rebuild — and, through it, a git call — several
+        hundred times per file opened.
+        """
+        if mark.get_name() == "insert":
+            self._cursor_moved()
+
     def _cursor_moved(self):
         if self.ghost.stale():
             self.ghost.clear()
             self._sync_hint()
         self._sync_status()
+
+    def _sync_status(self):
+        """Coalesced: a burst of cursor movement is worth one status bar."""
+        if self._status_pending:
+            return
+        self._status_pending = GLib.idle_add(self._sync_status_now,
+                                             priority=GLib.PRIORITY_DEFAULT_IDLE)
+
+    def _sync_status_now(self):
+        self._status_pending = None
+        self._write_status()
+        return False
 
     def _drop_timers(self):
         for name in ("_local_timer", "_claude_timer", "_copilot_timer"):
@@ -1480,6 +1620,7 @@ class Editor(Gtk.Box):
 
     # -- looks ----------------------------------------------------------------
     def restyle(self, theme, cfg):
+        badges.forget()
         self._scheme = sourcestyle.scheme_for(theme)
         for doc in self.docs:
             doc.buffer.set_style_scheme(self._scheme)
@@ -1489,3 +1630,4 @@ class Editor(Gtk.Box):
         self._diag_error = _rgba(theme["URGENT"])
         self._diag_warning = _rgba(theme["ACCENT2"])
         self.ghost.restyle(theme)
+        self._sync_tabs()

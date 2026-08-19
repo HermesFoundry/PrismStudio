@@ -11,6 +11,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 
+import badges  # noqa: E402
 import core  # noqa: E402
 import workspace  # noqa: E402
 
@@ -255,28 +256,32 @@ class Explorer(Gtk.Box):
     def _icon_for(self, _column, cell, model, it, _data):
         """Runs for every visible row on every draw, so it only does lookups.
 
-        The kind was worked out once when the row was made and the tints are
-        worked out once per skin: what is left here is two dictionary hits and
-        a cached pixbuf.
+        The kind was worked out once when the row was made, the tints once per
+        skin, and the tiles are drawn once each: what is left here is a couple
+        of dictionary hits.
         """
-        kind = model[it][2] or "plain"
+        name, kind = model[it][0], model[it][2] or "plain"
         tints = self._tints()
         if kind == "folder":
-            icon, colour = FOLDER_ICON, tints["FOLDER"]
-        elif kind == "exec":
-            icon, colour = "application-x-executable-symbolic", tints["OK"]
+            pixbuf = symbolic_icon(FOLDER_ICON, tints["FOLDER"])
+        elif kind in ("media", "exec"):
+            # a picture is a picture and a program is a program; letters would
+            # say less than the shape does
+            icon = ("image-x-generic-symbolic" if kind == "media"
+                    else "application-x-executable-symbolic")
+            pixbuf = symbolic_icon(icon, tints["MEDIA" if kind == "media" else "OK"])
         else:
-            icon = KIND_ICONS.get(kind, FILE_ICON)
             colour = tints.get(KINDS.get(kind, (None,))[0], tints["PLAIN"])
-        pixbuf = symbolic_icon(icon, colour)
+            pixbuf = badges.badge(badges.letters_for(name), colour)
         if pixbuf is not None:
             cell.set_property("pixbuf", pixbuf)
         else:
-            cell.set_property("icon-name", icon)
+            cell.set_property("icon-name", FILE_ICON)
 
     def restyle(self):
-        """New skin, new tints — the cached pixbufs are keyed by colour."""
+        """New skin, new tints — the tiles and pixbufs are drawn again."""
         self._tint_cache = None
+        badges.forget()
         self.view.queue_draw()
 
     # -- filling it ------------------------------------------------------------

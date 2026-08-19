@@ -90,11 +90,13 @@ one button in the title bar holds the menus, and `Ctrl+P` and `Ctrl+Shift+P`
 reach everything without the mouse.
 
 **Claude is summoned, not resident.** Nothing is on screen and no session is
-running until you press `Ctrl+Shift+C`, and when you do it opens where you told
-it to — a tab in the bottom panel (the default), a pane beside the editor, or
-its own window on another monitor. Moving it between the three keeps the
-session: it is a re-parent, not a restart. Preferences → Claude picks the
-place, and `CLAUDE=0` still removes every Claude feature from the app.
+running until you press `Ctrl+Shift+C`. By default it arrives **floating over
+the editor** — Escape puts it away and nothing in the layout ever moves. If you
+would rather dock it, it will also live as a tab in the bottom panel, as a pane
+beside the editor, or in its own window on another monitor; moving between the
+four keeps the running session, because it is a re-parent rather than a
+restart. Preferences → Claude picks the place, and `CLAUDE=0` still removes
+every Claude feature from the app.
 
 **It opens empty.** A bare `prism` lists nothing on your machine — not even
 the folder you had last time. The panel offers Open folder, Open file, Clone a
@@ -395,6 +397,7 @@ Drop more in `~/.config/prismstudio/themes/`, pick one in **Settings → Look**.
 | `Ctrl+Shift+F` | search the workspace |
 | `Ctrl+Shift+G` | source control |
 | `Ctrl+P` · `Ctrl+Shift+P` | go to file · command palette |
+| `Ctrl+Tab` | back to the file you were just in |
 | `Ctrl+B` · `Ctrl+J` · `Ctrl+Shift+C` | side bar · panel · open Claude |
 | `Ctrl+Shift+B` · `Shift+F5` · `Ctrl+Shift+L` | run · stop · open in browser |
 | `F5` | run just the open file |

@@ -1,8 +1,10 @@
-"""assistant — the Claude session, and the three places it is allowed to live.
+"""assistant — the Claude session, and the four places it is allowed to live.
 
 Claude is not part of the furniture. Nothing is on screen and no process is
 started until you ask for one; when you do, it opens where you last put it:
 
+  float    over the editor, Escape to dismiss — the default, and the one that
+           never moves anything else on screen
   panel    a tab in the drawer along the bottom, beside the terminals
   side     a pane down the right hand side of the editor
   window   its own window, for a second monitor
@@ -19,13 +21,14 @@ import os
 
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gdk, Gtk  # noqa: E402
 
 import core  # noqa: E402
 from explorer import icon_button  # noqa: E402
 from terminal import PrismTerminal  # noqa: E402
 
-PLACES = [("panel", "In the bottom panel"),
+PLACES = [("float", "Floating over the editor"),
+          ("panel", "In the bottom panel"),
           ("side", "Beside the editor"),
           ("window", "In its own window")]
 PLACE_NAMES = dict(PLACES)
@@ -71,7 +74,15 @@ class Assistant(Gtk.Box):
                      False, False, 0)
 
     def show_head(self, wanted):
-        """The head is redundant wherever the container already labels it."""
+        """The head is redundant wherever the container already labels it.
+
+        It is marked no-show-all so a container's show_all cannot bring it back
+        in the panel. That flag also makes show_all a no-op *on the head
+        itself*, children and all, so the children are shown one by one.
+        """
+        if wanted:
+            for child in self.head.get_children():
+                child.show_all()
         self.head.set_visible(wanted)
 
     # -- the session -----------------------------------------------------------
@@ -138,22 +149,62 @@ class Assistant(Gtk.Box):
 
 
 class ClaudeWindow(Gtk.Window):
-    """Claude on its own, for a second monitor.
+    """Claude off on its own, either floating or as a real window.
 
-    It holds the assistant widget rather than owning it: closing this window
-    hands the widget back to the main window with the session still running.
+    Floating is the default and the point of the whole thing: it appears over
+    the editor, Escape puts it away, and no pane anywhere resizes. Nothing in
+    the layout moves because Claude is not part of the layout.
+
+    Either way it holds the assistant widget rather than owning it, so closing
+    it hands the widget back with the session still running.
     """
 
-    def __init__(self, parent, assistant):
+    def __init__(self, parent, assistant, floating=False):
         super().__init__(title="Claude — %s" % (core.short_path(parent.root)
                                                 if parent.root else core.APP_NAME))
         self.parent = parent
-        self.set_default_size(560, 720)
+        self.floating = floating
         self.set_transient_for(parent)
         self.set_destroy_with_parent(True)
         self.get_style_context().add_class("prism")
+        if floating:
+            self.set_decorated(False)
+            self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
+            self.set_keep_above(True)
+            self.set_skip_taskbar_hint(True)
+            self.get_style_context().add_class("claudefloat")
+            self.connect("key-press-event", self._keys)
+        else:
+            self.set_default_size(560, 720)
         self.add(assistant)
         self.connect("delete-event", self._closed)
+
+    def _keys(self, _widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.parent.hide_claude()
+            return True
+        return False
+
+    def place_over(self, parent):
+        """Sit over the editor, big enough to work in, never off the screen."""
+        alloc = parent.get_allocation()
+        width = max(520, min(880, int(alloc.width * 0.52)))
+        height = max(360, min(760, int(alloc.height * 0.66)))
+        self.resize(width, height)
+        try:
+            origin_x, origin_y = parent.get_position()
+        except Exception:
+            origin_x, origin_y = 0, 0
+        # Centred over the editor, the way anything you summon should be. The
+        # right hand side is where it used to live and the whole point is that
+        # it does not live anywhere any more.
+        x = origin_x + max(0, (alloc.width - width) // 2)
+        y = origin_y + max(30, (alloc.height - height) // 2)
+        screen = self.get_screen()
+        if screen is not None:
+            x = max(0, min(x, max(0, screen.get_width() - width)))
+            y = max(0, min(y, max(0, screen.get_height() - height)))
+        self.move(x, y)
 
     def _closed(self, *_):
         self.parent.hide_claude()

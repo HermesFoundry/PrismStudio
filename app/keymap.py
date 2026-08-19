@@ -30,10 +30,12 @@ ACTIONS = [
     ("save-as",         "Save as…",                 "File",   "Ctrl+Shift+S",      "Ctrl+Alt+S"),
     ("close-file",      "Close this file",          "File",   "Ctrl+W",            "Ctrl+Shift+W"),
     ("close-folder",    "Close the folder",         "File",   "Ctrl+Shift+K",      "Ctrl+Alt+K"),
-    ("next-file",       "Next file",                "File",   "Ctrl+Tab, Ctrl+Page_Down",
-                                                              "Ctrl+Page_Down"),
-    ("prev-file",       "Previous file",            "File",   "Ctrl+Shift+Tab, Ctrl+Page_Up",
-                                                              "Ctrl+Page_Up"),
+    ("next-file",       "Next file",                "File",   "Ctrl+Page_Down",    "Ctrl+Page_Down"),
+    ("prev-file",       "Previous file",            "File",   "Ctrl+Page_Up",      "Ctrl+Page_Up"),
+    # Ctrl+Tab is the one you press without thinking, and what you mean by it
+    # is "the file I was just in", not "the next tab along".
+    ("recent-file",     "Back to the last file",    "File",   "Ctrl+Tab, Ctrl+Shift+Tab",
+                                                              "Ctrl+Tab"),
 
     ("undo",            "Undo",                     "Edit",   "Ctrl+Z",            "Ctrl+Shift+Z"),
     ("redo",            "Redo",                     "Edit",   "Ctrl+Y",            "Ctrl+Alt+Z"),
@@ -73,6 +75,7 @@ ACTIONS = [
     ("claude-edit",     "Have Claude change this",  "Claude", "Ctrl+I",            "Ctrl+I"),
     ("ask-claude",      "Point Claude at this file", "Claude", "Ctrl+Alt+A",       "Ctrl+Alt+A"),
     ("restart-claude",  "Restart Claude",           "Claude", "Ctrl+Alt+R",        "Ctrl+Alt+R"),
+    ("claude-place-float", "Float Claude over the editor",     "Claude", "", ""),
     ("claude-place-panel", "Open Claude in the bottom panel", "Claude", "", ""),
     ("claude-place-side",  "Open Claude beside the editor",   "Claude", "", ""),
     ("claude-place-window", "Open Claude in its own window",  "Claude", "", ""),

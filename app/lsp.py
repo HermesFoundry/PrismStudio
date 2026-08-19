@@ -288,6 +288,8 @@ class Client:
         self.on_diagnostics = on_diagnostics or (lambda path, items: None)
         self.on_log = on_log or (lambda text: None)
         self.enabled = True
+        self._starting = set()          # languages whose server is booting
+        self.on_ready = lambda language: None   # set by the editor, to re-open
 
     def set_root(self, root):
         if root == self.root:
@@ -296,21 +298,42 @@ class Client:
         self.root = root
 
     def server_for(self, language, start=True):
+        """The server for a language, or None while one is on its way.
+
+        Starting a language server means forking an interpreter, which is a
+        sixth of a second the editor used to spend frozen on the first file of
+        a language you opened. It boots on a thread now and says so when it is
+        up; until then this answers None and the caller simply does without.
+        """
         if not self.enabled or not language:
             return None
         if language in self.servers:
             server = self.servers[language]
             return server if server.alive() else None
-        if not start:
+        if not start or language in self._starting:
             return None
         name, argv = available_for(language)
         if not name:
             return None
-        server = Server(name, argv, self.root, self._diagnostics, self.on_log)
-        if not server.start():
-            return None
-        self.servers[language] = server
-        return server
+        self._starting.add(language)
+
+        def boot():
+            made = Server(name, argv, self.root, self._diagnostics, self.on_log)
+            started = made.start()
+            GLib.idle_add(landed, made, started)
+
+        def landed(made, started):
+            self._starting.discard(language)
+            if started:
+                self.servers[language] = made
+                try:
+                    self.on_ready(language)
+                except Exception:
+                    pass
+            return False
+
+        threading.Thread(target=boot, daemon=True).start()
+        return None
 
     def _diagnostics(self, path, items):
         self.diagnostics[path] = items

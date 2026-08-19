@@ -47,6 +47,15 @@ def build_css(t, cfg):
     return f"""
 * {{ outline: none; }}
 
+/* Everything that answers to the pointer fades rather than snaps. It is a
+   tenth of a second and it is most of the difference between an application
+   that feels built and one that feels assembled. */
+button, .toolbtn, .iconbtn, .edtab, .activitybtn, .paneltab, .statusbtn,
+.sidebtn, menuitem, .palette list > row {{
+    transition: background-color 120ms ease-out, color 120ms ease-out,
+                border-color 120ms ease-out, opacity 120ms ease-out;
+}}
+
 window.prism, .prism {{
     background: {bg}; color: {fg}; {font_rule} font-size: {BODY}px;
 }}
@@ -269,6 +278,22 @@ paned > separator:hover {{ background: {accent}; }}
    and where there is no window manager GTK draws its own title bar, which
    arrives Adwaita-white unless it is told otherwise. */
 window.prism .assistpane {{ background: {bg}; }}
+/* Floating over the editor: it has to read as a thing hovering above the
+   code, so it gets the panel colour, a real border and a shadow, and the
+   session inside keeps the editor's own background. */
+.claudefloat {{
+    background: {panel}; border: 1px solid {mix(panel, fg, 0.22)};
+    border-radius: 10px;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
+}}
+.claudefloat .assistpane {{
+    background: {bg}; border-radius: 0 0 9px 9px;
+}}
+.claudefloat .assisthead {{
+    background: {panel}; border-radius: 9px 9px 0 0;
+    border-bottom: 1px solid {line}; padding: 4px 6px 4px 12px;
+}}
+
 window.prism > headerbar, window.prism > .titlebar {{
     background: {head}; color: {fg}; border-bottom: 1px solid {line};
     min-height: 30px;
@@ -388,8 +413,17 @@ window.prism > headerbar .title, window.prism > .titlebar .title {{
 .welcome {{ background: {bg}; }}
 .welcomemark {{ color: {accent}; font-weight: 700; }}
 .welcometitle {{ color: {fg}; }}
-.welcomesub {{ color: {dim}; }}
-.welcomerow {{ color: {dim}; font-size: {SMALL}px; }}
+.welcomesub {{ color: {dim}; font-size: {BODY}px; }}
+.welcomehead {{
+    color: {mix(bg, fg, 0.45)}; font-size: {MICRO}px; font-weight: 700;
+    letter-spacing: 1.4px;
+}}
+.welcomeaction {{
+    background: transparent; border: none; color: {accent};
+    padding: 2px 6px 2px 0; font-size: {BODY}px;
+}}
+.welcomeaction:hover {{ color: {fg}; background: transparent; }}
+.welcomerow {{ color: {mix(bg, fg, 0.42)}; font-size: {SMALL}px; }}
 .welcomekey {{ color: {fg}; font-family: monospace; }}
 .welcomeinvite {{ color: {accent}; font-size: {SMALL}px; }}
 

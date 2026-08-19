@@ -135,6 +135,7 @@ class PrismWindow(Gtk.ApplicationWindow):
                               if getattr(self, "panel", None) else None)
         self.lsp.enabled = self.cfg.get("LSP", "1") == "1"
         self.editor = Editor(self, None, self.say_from_editor)
+        self.lsp.on_ready = self.editor.lsp_server_ready
         self.editor.on_saved = self.file_saved
         self.editor.on_ask = self.point_claude_at
         self.selection = (SelectionBar(self, self.editor)
@@ -259,6 +260,7 @@ class PrismWindow(Gtk.ApplicationWindow):
                       ("Toggle side bar", "toggle-sidebar"),
                       ("Toggle panel", "toggle-panel"), None,
                       ("Go to file…", "quick-open"),
+                      ("Back to the last file", "recent-file"),
                       ("Command palette…", "palette"),
                       ("Keyboard shortcuts", "keymap"), None,
                       ("Bigger text", "zoom-in"), ("Smaller text", "zoom-out"),
@@ -274,6 +276,7 @@ class PrismWindow(Gtk.ApplicationWindow):
                      ("New terminal", "new-terminal")])
         if self.assistant_enabled:
             menu("Claude", [("Open Claude", "toggle-assistant"), None,
+                            ("Float it over the editor", "claude-place-float"),
                             ("Open it in the bottom panel", "claude-place-panel"),
                             ("Open it beside the editor", "claude-place-side"),
                             ("Open it in its own window", "claude-place-window"), None,
@@ -433,7 +436,11 @@ class PrismWindow(Gtk.ApplicationWindow):
 
     def _apply_sizes(self):
         self.toggle_panel(self.cfg.get("PANEL", "0") == "1", False)
-        if self.assistant_enabled and self.cfg.get("ASSISTANT", "0") == "1":
+        # Reopening a docked Claude is restoring your layout; reopening a
+        # floating one is a window jumping at you before you have typed
+        # anything. The floating one waits to be asked, every time.
+        if (self.assistant_enabled and self.cfg.get("ASSISTANT", "0") == "1"
+                and self.claude_place() in ("panel", "side")):
             self.show_claude(focus=False, remember=False)
         self.assist_toggle.set_visible(self.assistant_enabled)
         return False
@@ -486,8 +493,8 @@ class PrismWindow(Gtk.ApplicationWindow):
     # Claude: summoned, placed, and put away again
     # ---------------------------------------------------------------------- #
     def claude_place(self):
-        place = self.cfg.get("CLAUDE_PLACE", "panel")
-        return place if place in ("panel", "side", "window") else "panel"
+        place = self.cfg.get("CLAUDE_PLACE", "float")
+        return place if place in ("float", "panel", "side", "window") else "float"
 
     def claude_showing(self):
         return self.assistant.get_parent() is not None
@@ -527,10 +534,14 @@ class PrismWindow(Gtk.ApplicationWindow):
                 except ValueError:
                     wanted = 420
                 self.middle.set_position(max(320, width - wanted))
-            elif place == "window":
-                self.claude_window = assistant_mod.ClaudeWindow(self, self.assistant)
+            elif place in ("window", "float"):
+                floating = place == "float"
+                self.claude_window = assistant_mod.ClaudeWindow(
+                    self, self.assistant, floating=floating)
                 self.assistant.show_head(True)
                 self.claude_window.show_all()
+                if floating:
+                    self.claude_window.place_over(self)
                 self.claude_window.present()
             else:
                 self.toggle_panel(True, remember=False)
@@ -539,7 +550,9 @@ class PrismWindow(Gtk.ApplicationWindow):
         elif place == "panel":
             self.toggle_panel(True, remember=False)
             self.panel.show("claude")
-        elif place == "window" and self.claude_window is not None:
+        elif place in ("window", "float") and self.claude_window is not None:
+            if place == "float":
+                self.claude_window.place_over(self)
             self.claude_window.present()
         self.assistant.start()
         if focus:
@@ -878,6 +891,7 @@ class PrismWindow(Gtk.ApplicationWindow):
             "save-as": lambda: (editor.save(ask=True), True)[1],
             "close-file": lambda: (editor.close_doc(), True)[1],
             "next-file": lambda: (editor.cycle(1), True)[1],
+            "recent-file": lambda: (editor.recent_file(), True)[1],
             "prev-file": lambda: (editor.cycle(-1), True)[1],
             "undo": lambda: (editor.undo(), True)[1],
             "redo": lambda: (editor.redo(), True)[1],
@@ -923,6 +937,7 @@ class PrismWindow(Gtk.ApplicationWindow):
             "ask-claude": lambda: (editor.ask_claude(), True)[1],
             "restart-claude": lambda: (self.show_claude(), self.assistant.restart(),
                                        True)[2],
+            "claude-place-float": lambda: self.place_claude("float"),
             "claude-place-panel": lambda: self.place_claude("panel"),
             "claude-place-side": lambda: self.place_claude("side"),
             "claude-place-window": lambda: self.place_claude("window"),
@@ -1075,8 +1090,9 @@ class PrismWindow(Gtk.ApplicationWindow):
         out = []
         actions = self.actions()
         claude_only = {"claude-edit", "ask-claude", "restart-claude",
-                       "toggle-assistant", "claude-place-panel",
-                       "claude-place-side", "claude-place-window"}
+                       "toggle-assistant", "claude-place-float",
+                       "claude-place-panel", "claude-place-side",
+                       "claude-place-window"}
         for ident, label, group, _default, _alt in keymap.ACTIONS:
             handler = actions.get(ident)
             if handler is None:
