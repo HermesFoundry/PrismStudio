@@ -1,13 +1,12 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "released": "2026-08-19",
-  "title": "PrismStudio 1.2.0 \u2014 it stopped fighting you",
+  "title": "PrismStudio 1.3.0 \u2014 the face you already know",
   "notes": [
-    "Opening a file is about twenty times quicker: it was forking a git process for every cursor movement, hundreds per file.",
-    "Typing in a large file no longer drags, and the first Python file you open no longer freezes the window while a language server starts.",
-    "Claude floats over the editor now \u2014 Ctrl+Shift+C to bring it up, Escape to dismiss, and nothing else on screen moves. Dock it in the panel, beside the editor or in its own window if you prefer.",
-    "Ctrl+Tab goes back to the file you were just in, not the next tab along.",
-    "Every file carries a tinted tile with its extension, in the tree and on its tab, and the start page tells you what you had open last."
+    "It now looks like the editor you have open all day: Dark+ to the hex, blue status bar and all, as the default skin.",
+    "Breadcrumbs above the editor, a minimap down the right, and indent guides through the code.",
+    "The menu bar is back in the title bar, and the side bar names the region on top with the folder underneath.",
+    "Skins can now name their own surfaces and token colours, so a palette copied from somewhere else stays exactly what it was copied from. Every existing skin still works."
   ],
   "url": "https://github.com/HermesFoundry/PrismStudio",
   "command": "git pull --ff-only && ./install.sh",
