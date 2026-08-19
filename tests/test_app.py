@@ -91,7 +91,7 @@ with open(os.path.join(OTHER, "readme.txt"), "w") as fh:
 def settings_checks():
     print("-- settings and skins --")
     cfg = core.load_settings()
-    check("settings have defaults", cfg["THEME"], "olympus")
+    check("settings have defaults", cfg["THEME"], "vscode")
     check("its own config folder", core.CONFIG_DIR.endswith("prismstudio"), True)
     core.save_settings({"THEME": "nord"})
     check("a change is written and read back", core.load_settings()["THEME"], "nord")
@@ -253,10 +253,15 @@ def start():
                 check("%s shows" % name, win.side_stack.get_visible_child_name(), name)
                 # The explorer is titled with the folder it is showing, the way
                 # every other region is titled with what it is.
-                expected = {"git": "SOURCE CONTROL",
-                            "explorer": os.path.basename(PROJECT).upper()}
+                # The region is named on top and what it is showing sits in
+                # the row underneath, the way this shape of side bar does it.
+                expected = {"git": "SOURCE CONTROL", "run": "RUN AND DEBUG"}
                 check("  and is titled", win.side_title.get_text(),
                       expected.get(name, name.upper()))
+                if name == "explorer":
+                    check("  with the folder in the section row",
+                          win.side_section.get_text(),
+                          os.path.basename(PROJECT).upper())
 
             print("\n-- the panel holds several terminals --")
             win.toggle_panel(True)

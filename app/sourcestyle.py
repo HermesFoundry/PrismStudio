@@ -18,9 +18,70 @@ CACHE = os.path.join(core.CACHE, "styles")
 
 
 def _rules(t):
-    """Token styles, keyed off the skin's own 16 terminal colours."""
+    """Token styles.
+
+    A skin may name its token colours — SYN_KEYWORD, SYN_STRING and the rest —
+    and a skin copied from somewhere else usually should, because the token
+    palette is half of what makes an editor recognisable. Anything it does not
+    name is keyed off its own sixteen terminal colours as before.
+    """
     a = t["_ansi"]
     fg, dim, accent, accent2 = t["FG"], t["DIM"], t["ACCENT"], t["ACCENT2"]
+
+    def syn(key, fallback):
+        return t.get(key) or fallback
+
+    comment = syn("SYN_COMMENT", dim)
+    string = syn("SYN_STRING", a[10])
+    number = syn("SYN_NUMBER", a[14])
+    keyword = syn("SYN_KEYWORD", a[13])
+    control = syn("SYN_CONTROL", keyword)
+    function = syn("SYN_FUNCTION", a[12])
+    type_ = syn("SYN_TYPE", a[11])
+    variable = syn("SYN_VARIABLE", fg)
+    constant = syn("SYN_CONSTANT", a[14])
+    operator = syn("SYN_OPERATOR", accent2)
+    if t.get("SYN_KEYWORD"):
+        # A named palette means the weights come with it: Dark+ and everything
+        # like it colour tokens and leave the weight alone.
+        return [
+            ("def:comment", comment, False, False),
+            ("def:shebang", comment, False, False),
+            ("def:doc-comment-element", comment, False, False),
+            ("def:constant", constant, False, False),
+            ("def:string", string, False, False),
+            ("def:special-char", syn("SYN_CONSTANT", constant), False, False),
+            ("def:special-constant", constant, False, False),
+            ("def:number", number, False, False),
+            ("def:floating-point", number, False, False),
+            ("def:decimal", number, False, False),
+            ("def:base-n-integer", number, False, False),
+            ("def:complex", number, False, False),
+            ("def:character", string, False, False),
+            ("def:boolean", keyword, False, False),
+            ("def:identifier", variable, False, False),
+            ("def:function", function, False, False),
+            ("def:builtin", function, False, False),
+            ("def:keyword", control, False, False),
+            ("def:type", type_, False, False),
+            ("def:preprocessor", function, False, False),
+            ("def:statement", control, False, False),
+            ("def:operator", operator, False, False),
+            ("def:reserved", keyword, False, False),
+            ("def:error", t["URGENT"], False, False),
+            ("def:warning", syn("SYN_NUMBER", number), False, False),
+            ("def:note", comment, False, False),
+            ("def:underlined", accent, False, True),
+            ("def:heading", keyword, False, False),
+            ("def:link-destination", string, False, True),
+            ("def:list-marker", keyword, False, False),
+            ("xml:tag", keyword, False, False),
+            ("xml:attribute-name", variable, False, False),
+            ("json:keyname", variable, False, False),
+            ("diff:added-line", t["OK"], False, False),
+            ("diff:removed-line", t["URGENT"], False, False),
+            ("diff:location", function, False, False),
+        ]
     return [
         # name, foreground, bold, italic
         ("def:comment", dim, False, True),
@@ -67,19 +128,21 @@ def scheme_xml(t):
     ident = "prism-%s" % t.get("_id", "custom")
     bg, fg = t["BG"], t["FG"]
     panel, dim, accent = t["PANEL"], t["DIM"], t["ACCENT"]
-    sel = core.mix(bg, accent, 0.32)
-    current = core.mix(bg, fg, 0.06)
-    gutter = core.mix(bg, fg, 0.30)
+    sel = t.get("SELECTION_BG") or core.mix(bg, accent, 0.32)
+    current = t.get("CURRENT_LINE") or core.mix(bg, fg, 0.06)
+    gutter = t.get("LINE_NUMBER") or core.mix(bg, fg, 0.30)
+    gutter_now = t.get("LINE_NUMBER_ACTIVE") or accent
 
+    text_fg = t.get("SYN_TEXT") or fg
     out = ['<?xml version="1.0" encoding="UTF-8"?>',
            '<style-scheme id="%s" name="Prism %s" version="1.0">' % (ident, saxutils.escape(name)),
            '  <author>PrismStudio</author>',
            '  <description>Generated from the %s skin</description>' % saxutils.escape(name),
-           '  <style name="text" foreground="%s" background="%s"/>' % (fg, bg),
-           '  <style name="selection" foreground="%s" background="%s"/>' % (fg, sel),
+           '  <style name="text" foreground="%s" background="%s"/>' % (text_fg, bg),
+           '  <style name="selection" background="%s"/>' % sel,
            '  <style name="selection-unfocused" background="%s"/>' % core.mix(bg, fg, 0.14),
            '  <style name="current-line" background="%s"/>' % current,
-           '  <style name="current-line-number" foreground="%s" bold="true"/>' % accent,
+           '  <style name="current-line-number" foreground="%s"/>' % gutter_now,
            '  <style name="line-numbers" foreground="%s" background="%s"/>' % (gutter, bg),
            '  <style name="right-margin" foreground="%s" background="%s"/>' % (dim, panel),
            '  <style name="draw-spaces" foreground="%s"/>' % core.mix(bg, fg, 0.22),

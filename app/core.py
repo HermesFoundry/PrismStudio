@@ -15,7 +15,7 @@ import time
 HOME = os.path.expanduser("~")
 APP_NAME = "PrismStudio"
 APP_ID = "foundry.hermes.PrismStudio"
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 HOMEPAGE = "https://github.com/HermesFoundry/PrismStudio"
 COPYRIGHT = "Copyright \u00a9 2026 Hermes Foundry"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -34,7 +34,7 @@ THEME_DIRS = [os.path.join(CONFIG_DIR, "themes"), os.path.join(ROOT, "themes")]
 
 DEFAULTS = {
     # look
-    "THEME": "olympus",
+    "THEME": "vscode",
     "FONT": "Ubuntu Sans Mono 11",
     "UI_FONT": "",              # blank means whatever the desktop uses
     "TAB_SIZE": "4",
@@ -42,7 +42,9 @@ DEFAULTS = {
     "WRAP": "0",
     "LINE_NUMBERS": "1",
     "CURRENT_LINE": "1",
-    "MINIMAP": "0",             # not built yet; here so the setting is stable
+    "MINIMAP": "1",             # the little picture of the file, on the right
+    "BREADCRUMBS": "1",         # the path strip under the tabs
+    "INDENT_GUIDES": "1",       # hairlines down each indent stop
     "RIGHT_MARGIN": "0",        # column to draw a guide at, 0 for none
 
     # layout
@@ -222,9 +224,13 @@ def load_theme(name):
     path = theme_path(name)
     if path:
         found = shvars(path)
-        for key in FALLBACK:
-            if found.get(key):
-                theme[key] = found[key]
+        # The eleven a skin must have, then anything else it chose to say. The
+        # extras are how a skin can be exact rather than derived: a palette
+        # like VS Code's names its own tab, activity bar and status bar
+        # colours instead of letting the stylesheet mix them out of two.
+        for key, value in found.items():
+            if value and key != "ANSI16" and key.isupper():
+                theme[key] = value
         ansi = found.get("ANSI16", "")
         colours = [c for c in re.split(r"[\s,]+", ansi) if c.startswith("#")]
         theme["_ansi"] = (colours + ANSI_FALLBACK[len(colours):]) if colours \

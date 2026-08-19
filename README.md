@@ -83,11 +83,18 @@ sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
 <img src="docs/media/window.png" alt="The PrismStudio window">
 
 Activity bar down the left switches the side bar between **Explorer**,
-**Search**, **Run** and **Extensions**. The editor is the middle. The terminal
-panel lives underneath and a status bar runs along the bottom. `Ctrl+B` hides
-the side bar, `Ctrl+J` the panel. Every divider drags. There is no menu bar:
-one button in the title bar holds the menus, and `Ctrl+P` and `Ctrl+Shift+P`
-reach everything without the mouse.
+**Search**, **Run** and **Extensions**. The editor is the middle, with
+breadcrumbs above it and a minimap down its right hand side. The terminal panel
+lives underneath and the status bar runs along the bottom. Menus are in the
+title bar where you reach for them, `Ctrl+B` hides the side bar, `Ctrl+J` the
+panel, and every divider drags.
+
+**It ships looking like the editor everyone already knows.** The default skin is
+`vscode`, which is Dark+ to the hex — the same greys, the same blue status bar,
+the same token colours — because a familiar window is one you do not have to
+learn. Any of the other skins is one setting away, and a skin can now name its
+own surfaces and token colours rather than having them mixed out of two, so a
+palette copied from somewhere else stays exactly what it was copied from.
 
 **Claude is summoned, not resident.** Nothing is on screen and no session is
 running until you press `Ctrl+Shift+C`. By default it arrives **floating over
@@ -441,6 +448,7 @@ python3 tests/test_project.py     # what each kind of folder is detected as
 python3 tests/test_runbar.py      # install, run, find the address, stop
 python3 tests/test_lsp.py         # language servers: diagnostics, completion
 python3 tests/test_claude.py      # where Claude opens, moving it, go-to-file
+python3 tests/test_look.py        # named surfaces, breadcrumbs, minimap, guides
 python3 tests/test_updates.py     # version compare, the throttle, staying quiet
 python3 tests/test_github.py      # clone for real, publish, never touch a token
 python3 tests/test_copilot.py     # the Copilot handshake, against the real server

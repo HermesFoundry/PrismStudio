@@ -18,6 +18,7 @@ import core  # noqa: E402
 import explorer as explorer_mod  # noqa: E402
 import inline  # noqa: E402
 import lsp  # noqa: E402
+import minimap  # noqa: E402
 import sourcestyle  # noqa: E402
 
 MAX_BYTES = 4 * 1024 * 1024
@@ -334,10 +335,25 @@ class Editor(Gtk.Box):
         self.view.set_pixels_above_lines(1)
         self.view.set_pixels_below_lines(1)
         self.view.get_style_context().add_class("codeeditor")
+        # Indent guides. GtkSourceView 4 has no such thing, so they are drawn
+        # under the text: one hairline per indent stop, for the lines actually
+        # on screen, which is cheap enough to do on every draw.
+        self.view.connect_after("draw", self._draw_guides)
+        self._guide_rgba = None
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroll.add(self.view)
+        self.scroll = scroll
+
+        # ---- the minimap -----------------------------------------------------
+        self.minimap = minimap.Minimap(self)
+        self.minimap.set_no_show_all(True)
+        with_map = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        with_map.pack_start(scroll, True, True, 0)
+        with_map.pack_start(self.minimap, False, False, 0)
+        scroll.get_vadjustment().connect("value-changed",
+                                         lambda *_: self.minimap.touch())
 
         self.findbar = FindBar(self)
 
@@ -378,12 +394,20 @@ class Editor(Gtk.Box):
         # ---- nothing open ---------------------------------------------------
         self.welcome = self._build_welcome()
 
+        # ---- breadcrumbs -----------------------------------------------------
+        # Where the open file sits, one clickable segment per folder, the way
+        # every editor of this shape shows it.
+        self.crumbs = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        self.crumbs.get_style_context().add_class("breadcrumbs")
+        self.crumbs.set_no_show_all(True)
+
         self.stack = Gtk.Stack()
         self.stack.add_named(self.welcome, "welcome")
         self.editing = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.editing.pack_start(self.crumbs, False, False, 0)
         self.editing.pack_start(self.editbar, False, False, 0)
         self.editing.pack_start(self.findbar, False, False, 0)
-        self.editing.pack_start(scroll, True, True, 0)
+        self.editing.pack_start(with_map, True, True, 0)
         self.stack.add_named(self.editing, "editing")
         self.pack_start(self.stack, True, True, 0)
 
@@ -682,6 +706,8 @@ class Editor(Gtk.Box):
         self.editbar.set_reveal_child(False)
         self.stack.set_visible_child(self.editing)
         self._sync_tabs()
+        self._sync_crumbs()
+        self.minimap.touch()
         self._sync_status()
         if focus:
             self.view.grab_focus()
@@ -813,6 +839,118 @@ class Editor(Gtk.Box):
         self.tabs.show_all()
         self.save_btn.set_sensitive(bool(self.current and (self.current.buffer.get_modified()
                                                            or not self.current.path)))
+
+    # -- indent guides ---------------------------------------------------------
+    def _draw_guides(self, view, ctx):
+        if self.win.cfg.get("INDENT_GUIDES", "1") != "1" or self._guide_rgba is None:
+            return False
+        doc = self.doc()
+        if doc is None:
+            return False
+        buf = doc.buffer
+        width = view.get_tab_width() or 4
+        area = view.get_visible_rect()
+        start_line = view.get_line_at_y(area.y)[0].get_line()
+        end_line = view.get_line_at_y(area.y + area.height)[0].get_line()
+
+        # a character's width, measured once from the view's own font
+        layout = view.create_pango_layout("0")
+        char_width = max(1, layout.get_pixel_size()[0])
+        red, green, blue, alpha = self._guide_rgba
+        ctx.set_source_rgba(red, green, blue, alpha)
+        ctx.set_line_width(1)
+
+        margin = view.get_left_margin()
+        for line in range(start_line, min(end_line + 1, buf.get_line_count())):
+            it = buf.get_iter_at_line(line)
+            end = it.copy()
+            if not end.ends_line():
+                end.forward_to_line_end()
+            text = buf.get_text(it, end, False)
+            stripped = text.lstrip()
+            if not stripped:
+                continue                # blank lines take their guides from
+            indent = len(text) - len(stripped)  # whatever is around them
+            y, height = view.get_line_yrange(it)
+            top = view.buffer_to_window_coords(Gtk.TextWindowType.TEXT, 0, y)[1]
+            for stop in range(width, indent, width):
+                x = margin + stop * char_width + 0.5
+                ctx.move_to(x, top)
+                ctx.line_to(x, top + height)
+            ctx.stroke()
+        return False
+
+    # -- what the minimap needs to know ---------------------------------------
+    def visible_lines(self):
+        """The first and last line actually on screen."""
+        try:
+            area = self.view.get_visible_rect()
+        except Exception:
+            return 0, 0
+        top = self.view.get_line_at_y(area.y)[0].get_line()
+        bottom = self.view.get_line_at_y(area.y + area.height)[0].get_line()
+        return top, max(top, bottom)
+
+    def scroll_to_line(self, line):
+        doc = self.doc()
+        if doc is None:
+            return
+        it = doc.buffer.get_iter_at_line(max(0, line))
+        self.view.scroll_to_iter(it, 0.0, True, 0.0, 0.5)
+
+    def show_minimap(self, wanted):
+        self.minimap.set_visible(bool(wanted))
+        if wanted:
+            self.minimap.restyle(self.win.theme)
+            self.minimap.touch()
+
+    def _sync_crumbs(self):
+        """The path of the open file, as buttons, relative to the workspace."""
+        for child in self.crumbs.get_children():
+            self.crumbs.remove(child)
+        doc = self.current
+        path = doc.path if doc else None
+        if not path or self.win.cfg.get("BREADCRUMBS", "1") != "1":
+            self.crumbs.set_visible(False)
+            return
+        root = self.win.root
+        try:
+            shown = os.path.relpath(path, root) if root else path
+        except ValueError:
+            shown = path
+        if shown.startswith(".."):
+            shown = path
+        parts = [p for p in shown.split(os.sep) if p]
+        walked = root or os.path.dirname(path)
+        for index, part in enumerate(parts):
+            if index:
+                arrow = Gtk.Label(label="›")
+                arrow.get_style_context().add_class("crumbsep")
+                self.crumbs.pack_start(arrow, False, False, 0)
+            walked = os.path.join(walked, part)
+            crumb = Gtk.Button(label=part)
+            crumb.set_relief(Gtk.ReliefStyle.NONE)
+            crumb.get_style_context().add_class("crumb")
+            if index == len(parts) - 1:
+                tile = badges.badge(badges.letters_for(part), self._tab_tint(part))
+                if tile is not None:
+                    crumb.set_image(Gtk.Image.new_from_pixbuf(tile))
+                    crumb.set_always_show_image(True)
+            target = walked
+            crumb.connect("clicked", (lambda t: lambda *_: self._crumb_clicked(t))(target))
+            self.crumbs.pack_start(crumb, False, False, 0)
+        for child in self.crumbs.get_children():
+            child.show_all()            # show_all is a no-op on the box itself
+        self.crumbs.set_visible(True)
+
+    def _crumb_clicked(self, target):
+        """A folder crumb reveals it; the file crumb offers the file list."""
+        if os.path.isdir(target):
+            self.win.explorer.reveal(target) if hasattr(self.win.explorer, "reveal") \
+                else self.win.do_action("side-explorer")
+        else:
+            self.win.do_action("quick-open")
+        return True
 
     def _tab_tint(self, name):
         """The same family colour the tree uses, so a tab and its row match."""
@@ -1169,6 +1307,7 @@ class Editor(Gtk.Box):
     def _typed(self, doc):
         """Something changed in the buffer: re-suggest, and maybe save."""
         doc.revision += 1
+        self.minimap.touch()
         self._sync_status()
         self._drop_timers()
         self.ghost.clear()
@@ -1621,12 +1760,17 @@ class Editor(Gtk.Box):
     # -- looks ----------------------------------------------------------------
     def restyle(self, theme, cfg):
         badges.forget()
+        self.minimap.restyle(theme)
+        self.show_minimap(cfg.get("MINIMAP", "1") == "1")
         self._scheme = sourcestyle.scheme_for(theme)
         for doc in self.docs:
             doc.buffer.set_style_scheme(self._scheme)
         self.view.override_font(Pango.FontDescription.from_string(
             cfg.get("FONT", "Ubuntu Sans Mono 11")))
         self._touch_colour = core.mix(theme["BG"], theme["ACCENT"], 0.28)
+        guide = theme.get("GUIDE") or core.mix(theme["BG"], theme["FG"], 0.22)
+        red, green, blue = core.rgb(guide)
+        self._guide_rgba = (red / 255, green / 255, blue / 255, 0.85)
         self._diag_error = _rgba(theme["URGENT"])
         self._diag_warning = _rgba(theme["ACCENT2"])
         self.ghost.restyle(theme)

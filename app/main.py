@@ -107,6 +107,8 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.run_side = self._build_run_side()
         self.extensions_side = self._build_extensions_side()
 
+        # Two rows, the way this shape of side bar has them: what the panel is,
+        # then what it is currently showing.
         self.side_title = Gtk.Label(label="EXPLORER")
         self.side_title.set_xalign(0.0)
         self.side_title.get_style_context().add_class("sidetitle")
@@ -115,6 +117,17 @@ class PrismWindow(Gtk.ApplicationWindow):
         side_head.pack_start(self.side_title, True, True, 0)
         self.side_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         side_head.pack_end(self.side_actions, False, False, 0)
+
+        self.side_section = Gtk.Label(label="")
+        self.side_section.set_xalign(0.0)
+        self.side_section.get_style_context().add_class("sidesection")
+        section_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        section_row.get_style_context().add_class("sidesectionrow")
+        chevron = Gtk.Label(label="⌄")
+        chevron.get_style_context().add_class("sidechevron")
+        section_row.pack_start(chevron, False, False, 0)
+        section_row.pack_start(self.side_section, True, True, 0)
+        self.side_section_row = section_row
 
         self.side_stack = Gtk.Stack()
         self.side_stack.add_named(self.explorer, "explorer")
@@ -126,6 +139,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.sidebar.get_style_context().add_class("sidebar")
         self.sidebar.pack_start(side_head, False, False, 0)
+        self.sidebar.pack_start(section_row, False, False, 0)
         self.sidebar.pack_start(self.side_stack, True, True, 0)
 
         # ---- editor and panel ------------------------------------------------
@@ -220,14 +234,13 @@ class PrismWindow(Gtk.ApplicationWindow):
     # chrome
     # ---------------------------------------------------------------------- #
     def _build_menu(self):
-        """Every command, behind one button.
+        """The menu bar, along the left of the title bar.
 
-        A menu bar across the top is seven click targets you use twice a week
-        and a row of chrome you look at all day. The same groups live in here,
-        and the palette reaches all of them without the mouse: Ctrl+P for a
-        file, Ctrl+Shift+P for a command.
+        Every editor of this shape has one and people reach for it, so it is
+        back where they reach. The palette still gets everywhere without the
+        mouse: Ctrl+P for a file, Ctrl+Shift+P for a command.
         """
-        bar = Gtk.Menu()
+        bar = Gtk.MenuBar()
         bar.get_style_context().add_class("prismmenu")
 
         def menu(label, items):
@@ -293,18 +306,7 @@ class PrismWindow(Gtk.ApplicationWindow):
                       ("About", "about")])
         bar.show_all()
         self.app_menu = bar
-
-        button = Gtk.MenuButton()
-        button.set_popup(bar)
-        button.set_tooltip_text("Menu")
-        button.get_style_context().add_class("toolbtn")
-        button.get_style_context().add_class("appmenu")
-        if Gtk.IconTheme.get_default().has_icon("open-menu-symbolic"):
-            button.set_image(Gtk.Image.new_from_icon_name("open-menu-symbolic",
-                                                          Gtk.IconSize.MENU))
-        else:
-            button.set_label("☰")
-        self.header.pack_start(button)
+        self.header.pack_start(bar)
 
     def _build_header_buttons(self):
         self.title_label = Gtk.Label(label=core.APP_NAME)
@@ -710,15 +712,22 @@ class PrismWindow(Gtk.ApplicationWindow):
         branch = core.git_branch(self.root)
         self.branch_label.set_text(("⎇ " + branch) if branch else "")
 
+    SIDE_TITLES = {"explorer": "EXPLORER", "search": "SEARCH",
+                   "git": "SOURCE CONTROL", "run": "RUN AND DEBUG",
+                   "extensions": "EXTENSIONS"}
+
     def _sync_side_title(self, name=None):
-        """Name the region — except the explorer, which names the folder."""
+        """The region on top, what it is showing underneath."""
         name = name or self.side_stack.get_visible_child_name() or "explorer"
-        if name == "explorer" and self.root:
-            self.side_title.set_text(workspace.name_for(self.root).upper())
-        elif name == "git":
-            self.side_title.set_text("SOURCE CONTROL")
-        else:
-            self.side_title.set_text(name.upper())
+        self.side_title.set_text(self.SIDE_TITLES.get(name, name.upper()))
+        section = ""
+        if name == "explorer":
+            section = (workspace.name_for(self.root).upper() if self.root
+                       else "NO FOLDER OPENED")
+        elif name == "git" and self.root:
+            section = workspace.name_for(self.root).upper()
+        self.side_section.set_text(section)
+        self.side_section_row.set_visible(bool(section))
 
     def _sync_run_side(self):
         for child in self.run_targets.get_children():
