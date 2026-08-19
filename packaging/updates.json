@@ -1,13 +1,13 @@
 {
-  "version": "1.0.0",
-  "released": "2026-08-18",
-  "title": "PrismStudio 1.0.0",
+  "version": "1.1.0",
+  "released": "2026-08-19",
+  "title": "PrismStudio 1.1.0 \u2014 Claude is a guest now",
   "notes": [
-    "The first release as its own application, out of the Iris Terminal code view.",
-    "Source control: stage, commit, push and read history without leaving the editor.",
-    "Language servers for thirteen languages, so diagnostics and go-to-definition are real.",
-    "Highlight anything for Ask Claude, Change, Search and Copy.",
-    "Claude can be switched off completely, and nothing else is lost."
+    "Claude is summoned, not resident: nothing on screen and no session until you press Ctrl+Shift+C.",
+    "Choose where it opens \u2014 a tab in the bottom panel, a pane beside the editor, or its own window. Moving it keeps the session running.",
+    "Ctrl+P goes to any file in the folder, fuzzy matched. Type > in the same box for commands, : for a line number.",
+    "The menu bar is gone: one button in the title bar holds the menus, and the editor keeps the width.",
+    "Typing no longer slows down as a file grows \u2014 about thirty times less work per keystroke in a large file."
   ],
   "url": "https://github.com/HermesFoundry/PrismStudio",
   "command": "git pull --ff-only && ./install.sh",
