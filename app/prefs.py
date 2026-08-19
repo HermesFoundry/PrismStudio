@@ -102,6 +102,11 @@ class PrefsDialog(Gtk.Dialog):
             editor.autosave = value == "1"
         elif key == "FLUSH_FOR_CLAUDE":
             editor.flush_for_claude = value == "1"
+        elif key == "CLAUDE_PLACE":
+            # only move it if it is actually on screen; choosing a place is not
+            # a request to summon Claude
+            if self.win.claude_showing():
+                self.win.place_claude(value, remember=False)
         elif key == "LINE_NUMBERS":
             editor.view.set_show_line_numbers(value == "1")
         elif key == "CURRENT_LINE":
@@ -264,7 +269,22 @@ class PrefsDialog(Gtk.Dialog):
         note.get_style_context().add_class("hint")
         column.pack_start(note, False, False, 0)
 
-        self._heading(column, "The Claude pane")
+        self._heading(column, "Where Claude opens",
+                      "Claude is summoned, never resident: nothing is on "
+                      "screen and no session runs until you press "
+                      "Ctrl+Shift+C. This is where it appears when you do, "
+                      "and moving it keeps the session running.")
+        import assistant as assistant_mod
+        place = Gtk.ComboBoxText()
+        for ident, label in assistant_mod.PLACES:
+            place.append(ident, label)
+        place.set_active_id(self.win.cfg.get("CLAUDE_PLACE", "panel"))
+        place.connect("changed",
+                      lambda c: c.get_active_id() and self._set("CLAUDE_PLACE",
+                                                                c.get_active_id()))
+        self._row(column, "Opens", place)
+
+        self._heading(column, "The Claude session")
         command = Gtk.Entry()
         command.set_text(self.win.cfg.get("CLAUDE_CMD", "claude"))
         command.set_tooltip_text('for example "claude --resume"')

@@ -14,7 +14,7 @@ import subprocess
 HOME = os.path.expanduser("~")
 APP_NAME = "PrismStudio"
 APP_ID = "foundry.hermes.PrismStudio"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 HOMEPAGE = "https://github.com/HermesFoundry/PrismStudio"
 COPYRIGHT = "Copyright \u00a9 2026 Hermes Foundry"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -49,8 +49,11 @@ DEFAULTS = {
     "SIDEBAR_WIDTH": "240",
     "PANEL": "0",               # bottom panel open at startup
     "PANEL_HEIGHT": "220",
-    "ASSISTANT": "1",           # the Claude pane
-    "ASSISTANT_WIDTH": "420",
+    # Claude is summoned, never resident: nothing is on screen and no session
+    # exists until you ask for one, and where it opens is yours to choose.
+    "ASSISTANT": "0",           # open Claude at startup
+    "ASSISTANT_WIDTH": "420",   # when it opens beside the editor
+    "CLAUDE_PLACE": "panel",    # panel | side | window
 
     # editing
     "AUTOSAVE": "0",

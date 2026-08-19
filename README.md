@@ -64,7 +64,7 @@ sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
 
 </details>
 
-> **Linux only.** The terminal panel, the Claude pane and the run bar are built
+> **Linux only.** The terminal panel, the Claude session and the run bar are built
 > on **VTE**, which spawns children on a Unix pseudoterminal. Windows has no
 > equivalent and VTE has no port, so there is no native Windows build and no
 > macOS one. On Windows, run it under **WSL2** — with WSLg it opens as an
@@ -84,9 +84,17 @@ sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
 
 Activity bar down the left switches the side bar between **Explorer**,
 **Search**, **Run** and **Extensions**. The editor is the middle. The terminal
-panel lives underneath, Claude down the right, and a status bar along the
-bottom. `Ctrl+B` hides the side bar, `Ctrl+J` the panel, `Ctrl+Shift+C` Claude.
-Every divider drags.
+panel lives underneath and a status bar runs along the bottom. `Ctrl+B` hides
+the side bar, `Ctrl+J` the panel. Every divider drags. There is no menu bar:
+one button in the title bar holds the menus, and `Ctrl+P` and `Ctrl+Shift+P`
+reach everything without the mouse.
+
+**Claude is summoned, not resident.** Nothing is on screen and no session is
+running until you press `Ctrl+Shift+C`, and when you do it opens where you told
+it to — a tab in the bottom panel (the default), a pane beside the editor, or
+its own window on another monitor. Moving it between the three keeps the
+session: it is a re-parent, not a restart. Preferences → Claude picks the
+place, and `CLAUDE=0` still removes every Claude feature from the app.
 
 **It opens empty.** A bare `prism` lists nothing on your machine — not even
 the folder you had last time. The panel offers Open folder, Open file, Clone a
@@ -139,7 +147,7 @@ Switch source with the **assist:** button on the status bar, or
 | you do | what happens |
 |:--|:--|
 | `Ctrl+I` | say what you want changed — Claude rewrites the selection and it lands as **one** `Ctrl+Z`, tinted so you can see it |
-| `Ctrl+Alt+A` | types `@thatfile.js line 40:` into the Claude pane, **unsent**, for you to finish |
+| `Ctrl+Alt+A` | opens Claude and types `@thatfile.js line 40:` into it, **unsent**, for you to finish |
 | Claude edits a file on disk | the editor reloads it and highlights exactly what changed |
 
 The open file is saved just before Claude reads it, so it never works from a
@@ -215,9 +223,15 @@ moving.
 </tr>
 </table>
 
-`Ctrl+Shift+P` puts every built-in command and every extension command in one
-searchable list, with loose subsequence matching — `hvcct` finds *Have Claude
-change this*. That list is what makes an extension findable at all.
+One box goes anywhere in the workspace. `Ctrl+P` opens it on the **files** in
+the folder, fuzzy matched — `sdbt` finds `src/deep/buried_thing.py`. Type `>`
+and it is the **command** list instead, every built-in and every extension
+command, with the same loose matching: `hvcct` finds *Have Claude change this*.
+Type `:` and a number to jump to a **line**. That list is what makes an
+extension findable at all.
+
+The file list is walked once in the background when you open a folder and kept,
+so the box opens instantly in a large repository rather than counting it first.
 
 An extension is a Python file in `~/.config/prismstudio/extensions` with a
 `register(prism)` function:
@@ -380,8 +394,8 @@ Drop more in `~/.config/prismstudio/themes/`, pick one in **Settings → Look**.
 | `Ctrl+F` · `Ctrl+H` · `Ctrl+G` | find · replace · go to line |
 | `Ctrl+Shift+F` | search the workspace |
 | `Ctrl+Shift+G` | source control |
-| `Ctrl+Shift+P` | command palette |
-| `Ctrl+B` · `Ctrl+J` · `Ctrl+Shift+C` | side bar · panel · Claude |
+| `Ctrl+P` · `Ctrl+Shift+P` | go to file · command palette |
+| `Ctrl+B` · `Ctrl+J` · `Ctrl+Shift+C` | side bar · panel · open Claude |
 | `Ctrl+Shift+B` · `Shift+F5` · `Ctrl+Shift+L` | run · stop · open in browser |
 | `F5` | run just the open file |
 | `Ctrl+space` · `Ctrl+Shift+space` | suggest here · change source |
@@ -423,6 +437,7 @@ python3 tests/test_extensions.py  # loading, isolation of a broken one, the pale
 python3 tests/test_project.py     # what each kind of folder is detected as
 python3 tests/test_runbar.py      # install, run, find the address, stop
 python3 tests/test_lsp.py         # language servers: diagnostics, completion
+python3 tests/test_claude.py      # where Claude opens, moving it, go-to-file
 python3 tests/test_updates.py     # version compare, the throttle, staying quiet
 python3 tests/test_github.py      # clone for real, publish, never touch a token
 python3 tests/test_copilot.py     # the Copilot handshake, against the real server

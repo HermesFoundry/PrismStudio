@@ -251,8 +251,12 @@ def start():
                 win._side(name)
                 pump(60)
                 check("%s shows" % name, win.side_stack.get_visible_child_name(), name)
+                # The explorer is titled with the folder it is showing, the way
+                # every other region is titled with what it is.
+                expected = {"git": "SOURCE CONTROL",
+                            "explorer": os.path.basename(PROJECT).upper()}
                 check("  and is titled", win.side_title.get_text(),
-                      "SOURCE CONTROL" if name == "git" else name.upper())
+                      expected.get(name, name.upper()))
 
             print("\n-- the panel holds several terminals --")
             win.toggle_panel(True)

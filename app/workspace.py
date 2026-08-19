@@ -17,6 +17,7 @@ import core
 
 MAX_RECENT = 12
 MAX_REMEMBERED_FILES = 24
+MAX_INDEXED_FILES = 20000       # a fuzzy list this long still filters instantly
 
 
 def _load():
@@ -126,6 +127,38 @@ def name_for(root):
 IGNORE = {".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "venv",
           ".mypy_cache", ".pytest_cache", ".next", ".nuxt", "dist", "build",
           ".idea", ".vscode", "target", ".tox", ".cache", ".gradle", "vendor"}
+
+
+def walk_files(root, limit=MAX_INDEXED_FILES):
+    """Every interesting file under a folder, as paths relative to it.
+
+    For the go-to-file box. It skips whatever the tree skips, so a node_modules
+    or a .git never lands in the list, and it stops at a limit rather than
+    walking a home directory somebody opened by mistake for a minute.
+    """
+    if not root or not os.path.isdir(root):
+        return []
+    found, stack = [], [root]
+    while stack and len(found) < limit:
+        here = stack.pop()
+        try:
+            entries = sorted(os.scandir(here), key=lambda e: e.name.lower())
+        except OSError:
+            continue
+        for entry in entries:
+            if not interesting(entry.name):
+                continue
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    stack.append(entry.path)
+                elif entry.is_file(follow_symlinks=False):
+                    found.append(os.path.relpath(entry.path, root))
+                    if len(found) >= limit:
+                        break
+            except OSError:
+                continue
+    found.sort(key=str.lower)
+    return found
 
 
 def interesting(name, path=None):

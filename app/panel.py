@@ -33,10 +33,17 @@ class Panel(Gtk.Box):
 
         self.tab_terminal = tab_button("TERMINAL")
         self.tab_output = tab_button("OUTPUT", self.tab_terminal)
+        # Claude gets a tab here only while it is living in the panel, so the
+        # drawer says TERMINAL OUTPUT until you summon it and TERMINAL OUTPUT
+        # CLAUDE afterwards.
+        self.tab_claude = tab_button("CLAUDE", self.tab_terminal)
+        self.tab_claude.set_no_show_all(True)
         self.tab_terminal.connect("toggled", lambda b: b.get_active() and self.show("terminal"))
         self.tab_output.connect("toggled", lambda b: b.get_active() and self.show("output"))
+        self.tab_claude.connect("toggled", lambda b: b.get_active() and self.show("claude"))
         head.pack_start(self.tab_terminal, False, False, 0)
         head.pack_start(self.tab_output, False, False, 0)
+        head.pack_start(self.tab_claude, False, False, 0)
 
         self.picker = Gtk.ComboBoxText()
         self.picker.get_style_context().add_class("termpick")
@@ -47,10 +54,17 @@ class Panel(Gtk.Box):
         from explorer import icon_button
         head.pack_end(icon_button("window-close-symbolic", "✕", "Hide the panel   Ctrl+J",
                                   lambda *_: self.window.toggle_panel()), False, False, 0)
-        head.pack_end(icon_button("edit-delete-symbolic", "kill", "Close this terminal",
-                                  lambda *_: self.close_terminal()), False, False, 0)
-        head.pack_end(icon_button("list-add-symbolic", "+", "New terminal",
-                                  lambda *_: self.new_terminal()), False, False, 0)
+        self.terminal_actions = []
+        for icon, fallback, tip, cb in (
+                ("edit-delete-symbolic", "kill", "Close this terminal",
+                 lambda *_: self.close_terminal()),
+                ("list-add-symbolic", "+", "New terminal",
+                 lambda *_: self.new_terminal())):
+            button = icon_button(icon, fallback, tip, cb)
+            button.set_no_show_all(True)
+            button.set_visible(True)
+            self.terminal_actions.append(button)
+            head.pack_end(button, False, False, 0)
         self.pack_start(head, False, False, 0)
 
         self.terminal_stack = Gtk.Stack()
@@ -120,7 +134,8 @@ class Panel(Gtk.Box):
         if current:
             self.picker.set_active_id(current)
         self.picker.handler_unblock_by_func(self._picked)
-        self.picker.set_visible(len(self.terminals) > 1)
+        self.picker.set_visible(len(self.terminals) > 1
+                                and self.stack.get_visible_child_name() == "terminal")
 
     def _picked(self, combo):
         chosen = combo.get_active_id()
@@ -151,12 +166,43 @@ class Panel(Gtk.Box):
         buffer.insert(buffer.get_end_iter(), text.rstrip("\n") + "\n")
         self.output.scroll_to_iter(buffer.get_end_iter(), 0, False, 0, 0)
 
+    # -- Claude, while it is living here ---------------------------------------
+    def mount_claude(self, assistant):
+        """Take the assistant widget in as a third tab."""
+        if self.stack.get_child_by_name("claude") is None:
+            self.stack.add_named(assistant, "claude")
+        assistant.show_all()
+        assistant.show_head(False)
+        self.tab_claude.set_visible(True)
+        self.show("claude")
+
+    def unmount_claude(self):
+        """Hand the widget back, leaving the panel as it was."""
+        child = self.stack.get_child_by_name("claude")
+        if child is not None:
+            self.stack.remove(child)
+        self.tab_claude.set_visible(False)
+        if self.stack.get_visible_child_name() == "claude" or child is not None:
+            self.show("terminal")
+        return child
+
+    def claude_here(self):
+        return self.stack.get_child_by_name("claude") is not None
+
     def show(self, which):
+        if which == "claude" and self.stack.get_child_by_name("claude") is None:
+            which = "terminal"
         self.stack.set_visible_child_name(which)
         if which == "terminal" and not self.tab_terminal.get_active():
             self.tab_terminal.set_active(True)
         elif which == "output" and not self.tab_output.get_active():
             self.tab_output.set_active(True)
+        elif which == "claude" and not self.tab_claude.get_active():
+            self.tab_claude.set_active(True)
+        # the + and the bin belong to terminals, not to Claude
+        for button in getattr(self, "terminal_actions", []):
+            button.set_visible(which == "terminal")
+        self.picker.set_visible(which == "terminal" and len(self.terminals) > 1)
 
     def restyle(self, theme, cfg):
         for terminal in self.terminals:

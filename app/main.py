@@ -15,6 +15,8 @@ except the editor can be hidden, and what you had open comes back next time.
 """
 import os
 import sys
+import threading
+import time
 
 import gi
 gi.require_version("Gtk", "3.0")
@@ -32,6 +34,7 @@ import github  # noqa: E402
 import styling  # noqa: E402
 import updates  # noqa: E402
 import workspace  # noqa: E402
+import assistant as assistant_mod  # noqa: E402
 from assistant import Assistant  # noqa: E402
 from editor import Editor  # noqa: E402
 from explorer import Explorer, choose_file, choose_folder, icon_button  # noqa: E402
@@ -59,6 +62,11 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.km = keymap.Keymap()
         self.root = None
         self._status_timer = None
+        self._files = []                # the go-to-file list for this folder
+        self._file_root = None
+        self._file_at = 0.0
+        self._file_walking = False
+        self._file_watchers = []
         self.get_style_context().add_class("prism")
 
         self.set_default_size(1360, 860)
@@ -134,20 +142,23 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.runbar = RunBar(self)
         self.panel = Panel(self)
 
-        centre = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        centre.pack_start(self.runbar, False, False, 0)
-        centre.pack_start(self.editor, True, True, 0)
+        # The run controls sit at the end of the tab strip rather than in a bar
+        # of their own. A folder with nothing to run then costs no height at all.
+        self.editor.attach_run(self.runbar)
 
         self.vertical = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL)
-        self.vertical.pack1(centre, True, True)
+        self.vertical.pack1(self.editor, True, True)
         self.vertical.pack2(self.panel, False, True)
 
         # ---- Claude ----------------------------------------------------------
+        # Built, but deliberately not placed: it goes on screen when you ask
+        # for it, in whichever of the three places you last chose.
         self.assistant = Assistant(self)
+        self.claude_window = None
+        self._claude_where = None
 
         self.middle = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self.middle.pack1(self.vertical, True, True)
-        self.middle.pack2(self.assistant, False, True)
 
         self.outer = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self.outer.pack1(self.sidebar, False, True)
@@ -208,7 +219,14 @@ class PrismWindow(Gtk.ApplicationWindow):
     # chrome
     # ---------------------------------------------------------------------- #
     def _build_menu(self):
-        bar = Gtk.MenuBar()
+        """Every command, behind one button.
+
+        A menu bar across the top is seven click targets you use twice a week
+        and a row of chrome you look at all day. The same groups live in here,
+        and the palette reaches all of them without the mouse: Ctrl+P for a
+        file, Ctrl+Shift+P for a command.
+        """
+        bar = Gtk.Menu()
         bar.get_style_context().add_class("prismmenu")
 
         def menu(label, items):
@@ -239,8 +257,8 @@ class PrismWindow(Gtk.ApplicationWindow):
                       ("Source control", "side-git"), ("Run", "side-run"),
                       ("Extensions", "side-extensions"), None,
                       ("Toggle side bar", "toggle-sidebar"),
-                      ("Toggle panel", "toggle-panel"),
-                      ("Toggle Claude", "toggle-assistant"), None,
+                      ("Toggle panel", "toggle-panel"), None,
+                      ("Go to file…", "quick-open"),
                       ("Command palette…", "palette"),
                       ("Keyboard shortcuts", "keymap"), None,
                       ("Bigger text", "zoom-in"), ("Smaller text", "zoom-out"),
@@ -251,10 +269,15 @@ class PrismWindow(Gtk.ApplicationWindow):
                      ("Refresh", "git-refresh")])
         menu("Run", [("Run the app", "run-app"), ("Stop", "stop-app"),
                      ("Open in the browser", "open-app"), None,
-                     ("Run this file", "run-file"), None,
+                     ("Run this file", "run-file"),
+                     ("Look at the folder again", "rescan"), None,
                      ("New terminal", "new-terminal")])
         if self.assistant_enabled:
-            menu("Claude", [("Suggest here", "suggest"),
+            menu("Claude", [("Open Claude", "toggle-assistant"), None,
+                            ("Open it in the bottom panel", "claude-place-panel"),
+                            ("Open it beside the editor", "claude-place-side"),
+                            ("Open it in its own window", "claude-place-window"), None,
+                            ("Suggest here", "suggest"),
                             ("Change suggestion source", "suggest-mode"), None,
                             ("Have Claude change this…", "claude-edit"),
                             ("Point Claude at this file", "ask-claude"), None,
@@ -265,14 +288,29 @@ class PrismWindow(Gtk.ApplicationWindow):
         menu("Help", [("Keyboard shortcuts", "keymap"), None,
                       ("Check for updates", "check-updates"),
                       ("About", "about")])
-        self.header.pack_start(bar)
+        bar.show_all()
+        self.app_menu = bar
+
+        button = Gtk.MenuButton()
+        button.set_popup(bar)
+        button.set_tooltip_text("Menu")
+        button.get_style_context().add_class("toolbtn")
+        button.get_style_context().add_class("appmenu")
+        if Gtk.IconTheme.get_default().has_icon("open-menu-symbolic"):
+            button.set_image(Gtk.Image.new_from_icon_name("open-menu-symbolic",
+                                                          Gtk.IconSize.MENU))
+        else:
+            button.set_label("☰")
+        self.header.pack_start(button)
 
     def _build_header_buttons(self):
         self.title_label = Gtk.Label(label=core.APP_NAME)
         self.title_label.get_style_context().add_class("prismtitle")
         self.subtitle_label = Gtk.Label(label="")
         self.subtitle_label.get_style_context().add_class("prismsubtitle")
-        titles = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        # One line, side by side. Stacking the two costs every window a dozen
+        # pixels of title bar to say something the tab strip already says.
+        titles = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7)
         titles.pack_start(self.title_label, False, False, 0)
         titles.pack_start(self.subtitle_label, False, False, 0)
         self.header.set_custom_title(titles)
@@ -281,8 +319,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.assist_toggle.set_tooltip_text("Claude   Ctrl+Shift+C")
         self.assist_toggle.get_style_context().add_class("toolbtn")
         self.assist_toggle.set_label("Claude")
-        self.assist_toggle.connect("toggled",
-                                   lambda b: self.toggle_assistant(b.get_active(), False))
+        self.assist_toggle.connect("toggled", self._claude_button_toggled)
         self.header.pack_end(self.assist_toggle)
 
         self.panel_toggle = Gtk.ToggleButton()
@@ -297,9 +334,9 @@ class PrismWindow(Gtk.ApplicationWindow):
                                   lambda b: self.toggle_panel(b.get_active(), False))
         self.header.pack_end(self.panel_toggle)
 
-        self.header.pack_end(icon_button("open-menu-symbolic", "⋮",
-                                         "Command palette   Ctrl+Shift+P",
-                                         lambda *_: self.do_action("palette"), "toolbtn"))
+        self.header.pack_end(icon_button("edit-find-symbolic", "find",
+                                         "Go to file   Ctrl+P",
+                                         lambda *_: self.do_action("quick-open"), "toolbtn"))
 
     def _build_status(self):
         bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
@@ -396,14 +433,14 @@ class PrismWindow(Gtk.ApplicationWindow):
 
     def _apply_sizes(self):
         self.toggle_panel(self.cfg.get("PANEL", "0") == "1", False)
-        self.toggle_assistant(self.assistant_enabled
-                              and self.cfg.get("ASSISTANT", "1") == "1", False)
+        if self.assistant_enabled and self.cfg.get("ASSISTANT", "0") == "1":
+            self.show_claude(focus=False, remember=False)
         self.assist_toggle.set_visible(self.assistant_enabled)
         return False
 
     def show_side(self, name):
         self.side_stack.set_visible_child_name(name)
-        self.side_title.set_text("SOURCE CONTROL" if name == "git" else name.upper())
+        self._sync_side_title(name)
         self.sidebar.show()
         if name == "search":
             self.search.focus()
@@ -445,28 +482,128 @@ class PrismWindow(Gtk.ApplicationWindow):
             self.cfg["PANEL"] = "1" if want else "0"
         return True
 
-    def toggle_assistant(self, on=None, remember=True):
+    # ---------------------------------------------------------------------- #
+    # Claude: summoned, placed, and put away again
+    # ---------------------------------------------------------------------- #
+    def claude_place(self):
+        place = self.cfg.get("CLAUDE_PLACE", "panel")
+        return place if place in ("panel", "side", "window") else "panel"
+
+    def claude_showing(self):
+        return self.assistant.get_parent() is not None
+
+    def _park_claude(self):
+        """Take the widget out of wherever it is, session still running.
+
+        Unparenting keeps the Python reference, which keeps the terminal, which
+        keeps the shell and whatever Claude is in the middle of. Moving it is a
+        re-parent, never a restart.
+        """
+        if self.panel.claude_here():
+            self.panel.unmount_claude()
+        parent = self.assistant.get_parent()
+        if parent is not None:
+            parent.remove(self.assistant)
+        if self.claude_window is not None:
+            window, self.claude_window = self.claude_window, None
+            window.destroy()
+
+    def show_claude(self, focus=True, remember=True):
+        """Put Claude where it belongs and start it if it is not running."""
         if not self.assistant_enabled:
-            self.assistant.hide()
+            self.say("Claude is switched off in settings")
             return False
-        want = (not self.assistant.get_visible()) if on is None else on
-        self.assistant.set_visible(want)
-        if want:
-            self.assistant.show_all()
-            self.assistant.start()
-            # again the paned's own width, not the window's: the activity bar
-            # and side bar sit outside it
-            width = self.middle.get_allocated_width() or self.get_allocated_width() or 1300
-            try:
-                wanted = int(self.cfg.get("ASSISTANT_WIDTH", "420"))
-            except ValueError:
-                wanted = 420
-            self.middle.set_position(max(320, width - wanted))
-        if self.assist_toggle.get_active() != want:
-            self.assist_toggle.set_active(want)
+        place = self.claude_place()
+        if not self.claude_showing() or place != self._claude_where:
+            self._park_claude()
+            if place == "side":
+                self.middle.pack2(self.assistant, False, True)
+                self.assistant.show_head(True)
+                self.assistant.show_all()
+                width = (self.middle.get_allocated_width()
+                         or self.get_allocated_width() or 1300)
+                try:
+                    wanted = int(self.cfg.get("ASSISTANT_WIDTH", "420"))
+                except ValueError:
+                    wanted = 420
+                self.middle.set_position(max(320, width - wanted))
+            elif place == "window":
+                self.claude_window = assistant_mod.ClaudeWindow(self, self.assistant)
+                self.assistant.show_head(True)
+                self.claude_window.show_all()
+                self.claude_window.present()
+            else:
+                self.toggle_panel(True, remember=False)
+                self.panel.mount_claude(self.assistant)
+            self._claude_where = place
+        elif place == "panel":
+            self.toggle_panel(True, remember=False)
+            self.panel.show("claude")
+        elif place == "window" and self.claude_window is not None:
+            self.claude_window.present()
+        self.assistant.start()
+        if focus:
+            self.assistant.focus()
+        self._sync_claude_button(True)
         if remember:
-            self.cfg["ASSISTANT"] = "1" if want else "0"
+            self.cfg["ASSISTANT"] = "1"
         return True
+
+    def hide_claude(self, remember=True):
+        """Off the screen, still alive: summoning it again is instant."""
+        self._park_claude()
+        self._sync_claude_button(False)
+        if remember:
+            self.cfg["ASSISTANT"] = "0"
+        self.editor.view.grab_focus()
+        return True
+
+    def toggle_assistant(self, on=None, remember=True):
+        """The one entry point everything else uses, old name kept."""
+        if not self.assistant_enabled:
+            self._park_claude()
+            return False
+        want = (not self.claude_showing()) if on is None else on
+        return self.show_claude(remember=remember) if want \
+            else self.hide_claude(remember=remember)
+
+    def place_claude(self, where, remember=True):
+        """Move it, and open it there if it was not open."""
+        if where not in ("panel", "side", "window"):
+            return False
+        self.cfg["CLAUDE_PLACE"] = where
+        if remember:
+            core.save_settings(self.cfg)
+        self.show_claude()
+        self.say("Claude opens %s" % assistant_mod.PLACE_NAMES[where].lower())
+        return True
+
+    def claude_place_menu(self, button):
+        """The little chooser on Claude's own header."""
+        menu = Gtk.Menu()
+        here = self.claude_place()
+        group = None
+        for where, label in assistant_mod.PLACES:
+            item = Gtk.RadioMenuItem(label=label, group=group)
+            group = group or item
+            item.set_active(where == here)
+            item.connect("toggled", (lambda w: lambda i: i.get_active()
+                                     and w != self.claude_place()
+                                     and self.place_claude(w))(where))
+            menu.append(item)
+        menu.show_all()
+        menu.popup_at_widget(button, Gdk.Gravity.SOUTH_WEST,
+                             Gdk.Gravity.NORTH_WEST, None)
+        return True
+
+    def _sync_claude_button(self, on):
+        if self.assist_toggle.get_active() != on:
+            self.assist_toggle.handler_block_by_func(self._claude_button_toggled)
+            self.assist_toggle.set_active(on)
+            self.assist_toggle.handler_unblock_by_func(self._claude_button_toggled)
+
+    def _claude_button_toggled(self, button):
+        self.toggle_assistant(button.get_active())
 
     # ---------------------------------------------------------------------- #
     # the workspace
@@ -488,6 +625,8 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.runbar.rescan()
         self._sync_run_side()
         self._sync_title()
+        self._sync_side_title()
+        self.file_index(refresh=True)       # start the walk while you read
         if restore and self.cfg.get("RESTORE_SESSION", "1") == "1":
             self._restore_session()
         self.editor.show_welcome_if_empty()
@@ -550,13 +689,23 @@ class PrismWindow(Gtk.ApplicationWindow):
         open_file = self.editor.path
         if open_file:
             self.title_label.set_text(os.path.basename(open_file))
-            self.subtitle_label.set_text("%s — %s" % (name, core.APP_NAME))
+            self.subtitle_label.set_text(name if self.root else "")
         else:
             self.title_label.set_text(name if self.root else core.APP_NAME)
             self.subtitle_label.set_text(core.short_path(self.root) if self.root else "")
         self.set_title("%s — %s" % (name, core.APP_NAME) if self.root else core.APP_NAME)
         branch = core.git_branch(self.root)
         self.branch_label.set_text(("⎇ " + branch) if branch else "")
+
+    def _sync_side_title(self, name=None):
+        """Name the region — except the explorer, which names the folder."""
+        name = name or self.side_stack.get_visible_child_name() or "explorer"
+        if name == "explorer" and self.root:
+            self.side_title.set_text(workspace.name_for(self.root).upper())
+        elif name == "git":
+            self.side_title.set_text("SOURCE CONTROL")
+        else:
+            self.side_title.set_text(name.upper())
 
     def _sync_run_side(self):
         for child in self.run_targets.get_children():
@@ -601,7 +750,8 @@ class PrismWindow(Gtk.ApplicationWindow):
                 files.append({"path": doc.path, "line": it.get_line() + 1})
         workspace.save_session(self.root, files, self.editor.path,
                                {"panel": self.panel.get_visible(),
-                                "assistant": self.assistant.get_visible(),
+                                "assistant": self.claude_showing(),
+                                "claude_place": self.claude_place(),
                                 "sidebar": self.cfg.get("SIDEBAR", "explorer")})
 
     def _restore_session(self):
@@ -685,7 +835,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.search.set_folder(folder)
 
     def point_claude_at(self, path, first, last=None):
-        self.toggle_assistant(True)
+        self.show_claude(focus=False)
         return self.assistant.point_at(path, first, last)
 
     def point_claude_at_current(self):
@@ -766,12 +916,17 @@ class PrismWindow(Gtk.ApplicationWindow):
             "stop-app": lambda: self.runbar.stop() if self.runbar.running else False,
             "open-app": lambda: self.runbar.open_browser(),
             "run-file": self.run_file,
+            "rescan": self.rescan_project,
             "suggest": lambda: (editor.request_claude(True), True)[1],
             "suggest-mode": lambda: (editor.cycle_suggest_mode(), True)[1],
             "claude-edit": self.claude_edit,
             "ask-claude": lambda: (editor.ask_claude(), True)[1],
-            "restart-claude": lambda: (self.toggle_assistant(True),
-                                       self.assistant.restart(), True)[2],
+            "restart-claude": lambda: (self.show_claude(), self.assistant.restart(),
+                                       True)[2],
+            "claude-place-panel": lambda: self.place_claude("panel"),
+            "claude-place-side": lambda: self.place_claude("side"),
+            "claude-place-window": lambda: self.place_claude("window"),
+            "quick-open": self.quick_open,
             "new-window": self.new_window,
         }
         return self._actions
@@ -816,6 +971,13 @@ class PrismWindow(Gtk.ApplicationWindow):
             return self.runbar.toggle()
         return self.run_file()
 
+    def rescan_project(self):
+        """Look at the folder again after you have changed what is in it."""
+        found = self.runbar.rescan()
+        self._sync_run_side()
+        self.say(found.summary if self.root else "no folder open")
+        return True
+
     def run_file(self):
         import runner
         label, command = runner.command_for(self.editor.path)
@@ -847,17 +1009,74 @@ class PrismWindow(Gtk.ApplicationWindow):
             self.fullscreen()
         return True
 
+    # ---------------------------------------------------------------------- #
+    # going places
+    # ---------------------------------------------------------------------- #
     def show_palette(self):
+        """Ctrl+Shift+P — the commands, with the files a backspace away."""
+        return self._palette(start=">")
+
+    def quick_open(self):
+        """Ctrl+P — the files, with the commands a keystroke away."""
+        return self._palette(start="")
+
+    def _palette(self, start=""):
         import palette
-        window = palette.Palette(self, self.all_commands())
+        window = palette.Palette(self, self.all_commands(),
+                                 files=self.file_index(), start=start)
+        # If the walk is still going, hand the list over when it lands rather
+        # than making the box wait for it.
+        self._file_watchers.append(window.set_files)
+        window.connect("destroy", lambda *_: self._file_watchers.remove(window.set_files)
+                       if window.set_files in self._file_watchers else None)
         window.present_it()
         return True
+
+    def file_index(self, refresh=False):
+        """The workspace's files, walked in a thread and kept until they change.
+
+        Always returns immediately, with whatever is known. A folder that has
+        not been walked yet answers empty and fills itself in a moment later,
+        which is the difference between a box that opens now and a box that
+        opens when a repository has finished being counted.
+        """
+        root = self.root
+        if not root:
+            return []
+        stale = (self._file_root != root
+                 or refresh
+                 or (time.monotonic() - self._file_at) > 30)
+        if stale and not self._file_walking:
+            self._file_walking = True
+            if self._file_root != root:
+                self._files = []
+            self._file_root = root
+
+            def walk():
+                found = workspace.walk_files(root)
+                GLib.idle_add(self._files_landed, root, found)
+
+            threading.Thread(target=walk, daemon=True).start()
+        return self._files
+
+    def _files_landed(self, root, found):
+        self._file_walking = False
+        if root != self.root:
+            return False
+        self._files, self._file_at = found, time.monotonic()
+        for watcher in list(self._file_watchers):
+            try:
+                watcher(found)
+            except Exception:
+                pass
+        return False
 
     def all_commands(self):
         out = []
         actions = self.actions()
         claude_only = {"claude-edit", "ask-claude", "restart-claude",
-                       "toggle-assistant"}
+                       "toggle-assistant", "claude-place-panel",
+                       "claude-place-side", "claude-place-window"}
         for ident, label, group, _default, _alt in keymap.ACTIONS:
             handler = actions.get(ident)
             if handler is None:
@@ -1107,6 +1326,7 @@ class PrismWindow(Gtk.ApplicationWindow):
         self.editor.restyle(self.theme, self.cfg)
         self.panel.restyle(self.theme, self.cfg)
         self.assistant.restyle(self.theme, self.cfg)
+        self.explorer.restyle()
 
     def quit_app(self):
         self.close()

@@ -22,6 +22,15 @@ MAX_BYTES = 4 * 1024 * 1024
 LOCAL_DELAY = 80            # ms of quiet before the offline suggestion appears
 AUTOSAVE_DELAY = 1400       # ms of quiet before an open file is written back
 
+# What the suggestion engines are shown. Both of these used to be "the whole
+# file", which made every keystroke cost a copy of the buffer and a scan of it,
+# so typing in a large file got slower the longer the file was. Nothing needs
+# that much: the completion only ever looks at the lines around the cursor.
+CONTEXT_BEFORE = 8000       # characters behind the cursor
+CONTEXT_AFTER = 2000        # and in front of it
+INDEX_CHARS = 400000        # ceiling on what the word index reads in one pass
+INDEX_THROTTLE = 0.8        # seconds between rebuilds of that index
+
 
 def _rgba(colour):
     got = Gdk.RGBA()
@@ -311,6 +320,15 @@ class Editor(Gtk.Box):
         self.view.set_monospace(True)
         self.view.set_smart_backspace(True)
         self.view.set_show_line_marks(False)
+        # The chrome around it got tighter, so the canvas can afford to breathe:
+        # a little air at the edges and half a line between lines reads calmer
+        # than text jammed against the gutter.
+        self.view.set_left_margin(10)
+        self.view.set_right_margin(12)
+        self.view.set_top_margin(6)
+        self.view.set_bottom_margin(10)
+        self.view.set_pixels_above_lines(1)
+        self.view.set_pixels_below_lines(1)
         self.view.get_style_context().add_class("codeeditor")
 
         scroll = Gtk.ScrolledWindow()
@@ -392,6 +410,16 @@ class Editor(Gtk.Box):
 
         self.restyle(win.theme, win.cfg)
         self._show_welcome()
+
+    # -- the run controls -----------------------------------------------------
+    def attach_run(self, runbar):
+        """Put the run controls at the end of the tab strip.
+
+        Packed last, so they sit to the left of the file buttons and to the
+        right of the tabs, and they take their height from a row that has to
+        exist anyway.
+        """
+        self.head.pack_end(runbar, False, False, 2)
 
     # -- welcome --------------------------------------------------------------
     def _build_welcome(self):
@@ -1055,18 +1083,39 @@ class Editor(Gtk.Box):
                 GLib.source_remove(timer)
                 setattr(self, name, None)
 
-    def _context(self):
-        """Everything the engines need to know about where the cursor is."""
+    def _context(self, before=CONTEXT_BEFORE, after=CONTEXT_AFTER):
+        """Everything the engines need to know about where the cursor is.
+
+        A window around the cursor, not the file: this runs on a timer after
+        every keystroke, and copying a megabyte each time is what made typing
+        in a big file feel like wading.
+        """
         doc = self.current
         if doc is None:
             return None
         buf = doc.buffer
         it = buf.get_iter_at_mark(buf.get_insert())
-        start, end = buf.get_bounds()
-        before = buf.get_text(start, it, True)
-        after = buf.get_text(it, end, True)
+        start = it.copy()
+        start.backward_chars(min(before, it.get_offset()))
+        end = it.copy()
+        end.forward_chars(after)
+        text_before = buf.get_text(start, it, True)
+        text_after = buf.get_text(it, end, True)
         lang = buf.get_language()
-        return doc, before, after, (lang.get_id() if lang else None)
+        return doc, text_before, text_after, (lang.get_id() if lang else None)
+
+    def _index_text(self, doc):
+        """The text the word index reads, capped and centred on the cursor."""
+        buf = doc.buffer
+        if buf.get_char_count() <= INDEX_CHARS:
+            start, end = buf.get_bounds()
+            return buf.get_text(start, end, True)
+        it = buf.get_iter_at_mark(buf.get_insert())
+        start = it.copy()
+        start.backward_chars(min(INDEX_CHARS // 2, it.get_offset()))
+        end = it.copy()
+        end.forward_chars(INDEX_CHARS // 2)
+        return buf.get_text(start, end, True)
 
     def _suggest_local(self):
         self._local_timer = None
@@ -1076,7 +1125,8 @@ class Editor(Gtk.Box):
         doc, before, after, language = got
         if before.endswith(("\n", " ", "\t")) and not before.rstrip(" \t").endswith("\n"):
             pass                        # mid-indent is fine, keep going
-        counts = self.local.words(doc.key, before + after, doc.revision)
+        counts = self.local.words(doc.key, lambda: self._index_text(doc),
+                                  doc.revision, throttle=INDEX_THROTTLE)
         items = self.local.suggest(before, after, counts, language)
         if items:
             self.ghost.show(items)

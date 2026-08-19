@@ -79,19 +79,32 @@ class LocalEngine:
         self.extra = []                 # callables added by extensions
 
     # -- the index ---------------------------------------------------------
-    def words(self, key, text, stamp):
-        """Identifiers in this buffer, cached until it changes."""
+    def words(self, key, text, stamp, throttle=0.0):
+        """Identifiers in this buffer, cached until it changes.
+
+        Two things keep this off the critical path of a keystroke. `text` may
+        be a callable, so the buffer is only copied when the index is really
+        being rebuilt, and `throttle` seconds after a rebuild the last index is
+        handed back unchanged. A word you typed two hundred milliseconds ago is
+        not worth walking a megabyte for; the next rebuild will have it.
+        """
         got = self._cache.get(key)
-        if got and got[0] == stamp:
-            return got[1]
-        found = WORD.findall(text)
+        now = time.monotonic()
+        if got:
+            was, built, counts = got
+            if was == stamp:
+                return counts
+            if throttle and (now - built) < throttle:
+                return counts
+        body = text() if callable(text) else text
+        found = WORD.findall(body)
         if len(found) > MAX_INDEX:
             found = found[:MAX_INDEX]
         counts = {}
         for word in found:
             if len(word) > 2:
                 counts[word] = counts.get(word, 0) + 1
-        self._cache[key] = (stamp, counts)
+        self._cache[key] = (stamp, now, counts)
         return counts
 
     def forget(self, key):

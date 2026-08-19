@@ -34,26 +34,28 @@ class RunBar(Gtk.Box):
         self._watch = None
         self._shell_pgid = None
 
+        # Everything here hides itself when it has nothing to say. The strip
+        # this sits in belongs to the tabs; the run controls are guests on it
+        # and a folder with nothing to run should leave no trace.
         self.run_btn = Gtk.Button(label="▶  Run")
         self.run_btn.get_style_context().add_class("runbtn-main")
+        self.run_btn.set_no_show_all(True)
         self.run_btn.connect("clicked", lambda *_: self.toggle())
         self.pack_start(self.run_btn, False, False, 0)
 
         self.targets = Gtk.ComboBoxText()
         self.targets.set_tooltip_text("What to run")
+        self.targets.set_no_show_all(True)
         self.targets.connect("changed", lambda *_: self._sync())
         self.pack_start(self.targets, False, False, 0)
-
-        self.summary = Gtk.Label(label="no folder open")
-        self.summary.set_xalign(0.0)
-        self.summary.get_style_context().add_class("runsummary")
-        self.pack_start(self.summary, False, False, 0)
 
         self.state = Gtk.Label(label="")
         self.state.set_xalign(0.0)
         self.state.set_ellipsize(3)
+        self.state.set_max_width_chars(30)
+        self.state.set_no_show_all(True)
         self.state.get_style_context().add_class("runstate")
-        self.pack_start(self.state, True, True, 0)
+        self.pack_start(self.state, False, False, 0)
 
         self.open_btn = Gtk.Button(label="Open in browser")
         self.open_btn.get_style_context().add_class("runopen")
@@ -67,12 +69,8 @@ class RunBar(Gtk.Box):
         self.install_btn.set_no_show_all(True)
         self.pack_end(self.install_btn, False, False, 0)
 
-        rescan = Gtk.Button(label="↺")
-        rescan.set_relief(Gtk.ReliefStyle.NONE)
-        rescan.set_tooltip_text("Look at the folder again")
-        rescan.get_style_context().add_class("iconbtn")
-        rescan.connect("clicked", lambda *_: self.rescan())
-        self.pack_end(rescan, False, False, 0)
+        # Looking at the folder again lives on the Run menu now: it is a thing
+        # you do once in a session, and it was costing a permanent button.
 
     # -- what is in the folder -------------------------------------------------
     def rescan(self):
@@ -108,8 +106,6 @@ class RunBar(Gtk.Box):
     # -- appearance ------------------------------------------------------------
     def _sync(self):
         project = self.project
-        self.summary.set_text(project.summary if project.root else "no folder open")
-
         pending = project.pending
         blocked = project.blocked
         self.install_btn.set_visible(bool(pending))
@@ -133,12 +129,30 @@ class RunBar(Gtk.Box):
         elif pending:
             need = ", ".join(s.label.lower() for s in pending)
             self.state.set_text("needs setup first: %s" % need)
-        elif target is not None:
-            self.state.set_text(target.detail or "")
-        elif project.root:
+        elif project.root and not self.choices:
             self.state.set_text("nothing here PrismStudio knows how to run")
         else:
             self.state.set_text("")
+
+        # What a target does is a tooltip now rather than a line of prose held
+        # open across the width of the window.
+        self.set_tooltip_text(target.detail if target is not None else None)
+        self._sync_visible(pending, blocked)
+
+    def _sync_visible(self, pending, blocked):
+        """Show only the controls that mean something right now."""
+        offering = bool(self.choices) or self.running
+        self.run_btn.set_visible(offering)
+        self.targets.set_visible(offering)
+        # The state line is for trouble and for something starting up, never
+        # for narration. A folder with nothing to run says nothing at all, and
+        # once a server is up its own Open button carries the address.
+        self.state.get_style_context().remove_class("live")
+        if self.running and not self.url:
+            self.state.get_style_context().add_class("live")
+            self.state.set_visible(True)
+        else:
+            self.state.set_visible(bool(pending or blocked))
 
     # -- doing things ----------------------------------------------------------
     def install(self):

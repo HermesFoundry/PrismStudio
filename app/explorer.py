@@ -11,10 +11,71 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 
+import core  # noqa: E402
 import workspace  # noqa: E402
 
 FOLDER_ICON = "folder-symbolic"
 FILE_ICON = "text-x-generic-symbolic"
+
+# A file list where every row carries the same white page is a list you read
+# by name alone. No icon theme ships a symbol per language, but symbolic icons
+# take whatever colour they are handed, so the shape says what kind of thing it
+# is and the colour says which language — both out of the skin, so a new skin
+# recolours the tree with everything else.
+KINDS = {
+    "code": ("ACCENT", """py pyw js jsx mjs cjs ts tsx go rs c h cc cpp hpp java rb php
+                          lua swift kt cs vue svelte dart scala ex exs erl hs ml r pl"""),
+    "shell": ("OK", "sh bash zsh fish bat cmd ps1 mk makefile dockerfile"),
+    "data": ("ACCENT2", """json yaml yml toml ini cfg conf env xml sql csv tsv plist
+                           lock properties"""),
+    "markup": ("MARKUP", "html htm css scss sass less styl jinja j2 twig"),
+    "docs": ("QUIET", "md markdown rst txt text adoc org pdf doc docx tex"),
+    "media": ("MEDIA", """png jpg jpeg gif svg ico webp bmp tiff mp3 wav ogg mp4 mov
+                          webm ttf otf woff woff2"""),
+}
+EXTENSION_KIND = {ext: kind
+                  for kind, (_tint, exts) in KINDS.items()
+                  for ext in exts.split()}
+# where a different shape is available and says more than the generic page
+KIND_ICONS = {
+    "shell": "utilities-terminal-symbolic",
+    "media": "image-x-generic-symbolic",
+    "docs": "emblem-documents-symbolic",
+}
+_symbolic_cache = {}
+
+
+def symbolic_icon(name, colour, size=16):
+    """A symbolic icon rendered in one colour, kept so it is drawn once."""
+    key = (name, colour, size)
+    if key in _symbolic_cache:
+        return _symbolic_cache[key]
+    theme = Gtk.IconTheme.get_default()
+    info = theme.lookup_icon(name, size, 0) or theme.lookup_icon(FILE_ICON, size, 0)
+    pixbuf = None
+    if info is not None:
+        tint = Gdk.RGBA()
+        tint.parse(colour)
+        try:
+            pixbuf = info.load_symbolic(tint, None, None, None)[0]
+        except Exception:
+            try:
+                pixbuf = info.load_icon()
+            except Exception:
+                pixbuf = None
+    _symbolic_cache[key] = pixbuf
+    return pixbuf
+
+
+def file_kind(name):
+    """Which family a file name belongs to, by extension or by being famous."""
+    lowered = name.lower()
+    if lowered in ("makefile", "dockerfile", "justfile", "procfile"):
+        return "shell"
+    if lowered.startswith(".") and "." not in lowered[1:]:
+        return "data"                       # .gitignore, .env, .editorconfig
+    ext = lowered.rsplit(".", 1)[-1] if "." in lowered else ""
+    return EXTENSION_KIND.get(ext, "plain")
 
 
 def icon_button(icon, fallback, tip, cb, css="iconbtn"):
@@ -81,8 +142,9 @@ class Explorer(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.window = window
         self.root = None
+        self._tint_cache = None
 
-        self.store = Gtk.TreeStore(str, str, str)      # name, full path, icon
+        self.store = Gtk.TreeStore(str, str, str)      # name, full path, kind
         self.view = Gtk.TreeView(model=self.store)
         self.view.set_headers_visible(False)
         self.view.set_enable_search(True)
@@ -95,6 +157,8 @@ class Explorer(Gtk.Box):
         column.set_cell_data_func(cell_icon, self._icon_for)
         cell_text = Gtk.CellRendererText()
         cell_text.set_property("ellipsize", Pango.EllipsizeMode.MIDDLE)
+        cell_text.set_property("ypad", 1)          # GTK's default row is roomier
+        cell_icon.set_property("xpad", 2)          #   than a file list needs
         column.pack_start(cell_text, True)
         column.add_attribute(cell_text, "text", 0)
         self.view.append_column(column)
@@ -163,9 +227,57 @@ class Explorer(Gtk.Box):
             self.recent_box.pack_start(button, False, False, 0)
         self.recent_box.show_all()
 
-    @staticmethod
-    def _icon_for(_column, cell, model, it, _data):
-        cell.set_property("icon-name", model[it][2])
+    def _tints(self):
+        """The colour per family, mixed out of the active skin, once."""
+        if self._tint_cache is not None:
+            return self._tint_cache
+        t = self.window.theme
+        panel = t["PANEL"]
+
+        def calm(colour):
+            # A column of these runs the height of the window, so every tint is
+            # pulled a third of the way back towards the panel. Enough to tell
+            # the kinds apart at a glance, not enough to shout over the names.
+            return core.mix(panel, colour, 0.66)
+
+        self._tint_cache = {
+            "ACCENT": calm(t["ACCENT"]),
+            "ACCENT2": calm(t["ACCENT2"]),
+            "OK": calm(t["OK"]),
+            "MARKUP": calm(core.mix(t["ACCENT2"], t["ACCENT"], 0.5)),
+            "MEDIA": calm(core.mix(t["ACCENT"], t["URGENT"], 0.5)),
+            "QUIET": core.mix(panel, t["FG"], 0.55),
+            "PLAIN": core.mix(panel, t["FG"], 0.40),
+            "FOLDER": core.mix(panel, t["FG"], 0.62),
+        }
+        return self._tint_cache
+
+    def _icon_for(self, _column, cell, model, it, _data):
+        """Runs for every visible row on every draw, so it only does lookups.
+
+        The kind was worked out once when the row was made and the tints are
+        worked out once per skin: what is left here is two dictionary hits and
+        a cached pixbuf.
+        """
+        kind = model[it][2] or "plain"
+        tints = self._tints()
+        if kind == "folder":
+            icon, colour = FOLDER_ICON, tints["FOLDER"]
+        elif kind == "exec":
+            icon, colour = "application-x-executable-symbolic", tints["OK"]
+        else:
+            icon = KIND_ICONS.get(kind, FILE_ICON)
+            colour = tints.get(KINDS.get(kind, (None,))[0], tints["PLAIN"])
+        pixbuf = symbolic_icon(icon, colour)
+        if pixbuf is not None:
+            cell.set_property("pixbuf", pixbuf)
+        else:
+            cell.set_property("icon-name", icon)
+
+    def restyle(self):
+        """New skin, new tints — the cached pixbufs are keyed by colour."""
+        self._tint_cache = None
+        self.view.queue_draw()
 
     # -- filling it ------------------------------------------------------------
     def set_root(self, path):
@@ -192,10 +304,13 @@ class Explorer(Gtk.Box):
                 continue
             full = os.path.join(path, name)
             if os.path.isdir(full):
-                node = self.store.append(parent, [name, full, FOLDER_ICON])
+                node = self.store.append(parent, [name, full, "folder"])
                 self.store.append(node, ["", "", ""])     # a stub so it expands
             else:
-                self.store.append(parent, [name, full, FILE_ICON])
+                kind = file_kind(name)
+                if kind == "plain" and os.access(full, os.X_OK):
+                    kind = "exec"       # asked once here, never again on draw
+                self.store.append(parent, [name, full, kind])
 
     def _expanded(self, _view, it, _path):
         child = self.store.iter_children(it)
