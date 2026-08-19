@@ -1,15 +1,15 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "released": "2026-08-19",
-  "title": "PrismStudio 1.1.0 \u2014 Claude is a guest now",
+  "title": "PrismStudio 1.2.0 \u2014 it stopped fighting you",
   "notes": [
-    "Claude is summoned, not resident: nothing on screen and no session until you press Ctrl+Shift+C.",
-    "Choose where it opens \u2014 a tab in the bottom panel, a pane beside the editor, or its own window. Moving it keeps the session running.",
-    "Ctrl+P goes to any file in the folder, fuzzy matched. Type > in the same box for commands, : for a line number.",
-    "The menu bar is gone: one button in the title bar holds the menus, and the editor keeps the width.",
-    "Typing no longer slows down as a file grows \u2014 about thirty times less work per keystroke in a large file."
+    "Opening a file is about twenty times quicker: it was forking a git process for every cursor movement, hundreds per file.",
+    "Typing in a large file no longer drags, and the first Python file you open no longer freezes the window while a language server starts.",
+    "Claude floats over the editor now \u2014 Ctrl+Shift+C to bring it up, Escape to dismiss, and nothing else on screen moves. Dock it in the panel, beside the editor or in its own window if you prefer.",
+    "Ctrl+Tab goes back to the file you were just in, not the next tab along.",
+    "Every file carries a tinted tile with its extension, in the tree and on its tab, and the start page tells you what you had open last."
   ],
   "url": "https://github.com/HermesFoundry/PrismStudio",
   "command": "git pull --ff-only && ./install.sh",
-  "important": false
+  "important": true
 }
