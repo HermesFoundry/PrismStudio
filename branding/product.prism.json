@@ -1,0 +1,26 @@
+{
+  "nameShort": "PrismStudio",
+  "nameLong": "PrismStudio",
+  "applicationName": "prismstudio",
+  "dataFolderName": ".prismstudio",
+  "serverDataFolderName": ".prismstudio-server",
+  "serverApplicationName": "prismstudio-server",
+  "serverGreeting": ["PrismStudio Server"],
+  "tunnelApplicationName": "prismstudio-tunnel",
+  "urlProtocol": "prismstudio",
+  "linuxIconName": "prismstudio",
+  "darwinBundleIdentifier": "foundry.hermes.PrismStudio",
+  "win32DirName": "PrismStudio",
+  "win32NameVersion": "PrismStudio",
+  "win32MutexName": "prismstudio",
+  "win32RegValueName": "PrismStudio",
+  "win32ShellNameShort": "PrismStudio",
+  "win32AppUserModelId": "HermesFoundry.PrismStudio",
+  "licenseName": "MIT",
+  "licenseUrl": "https://github.com/HermesFoundry/PrismStudio/blob/main/LICENSE.txt",
+  "reportIssueUrl": "https://github.com/HermesFoundry/PrismStudio/issues/new",
+  "extensionsGallery": {
+    "serviceUrl": "https://open-vsx.org/vscode/gallery",
+    "itemUrl": "https://open-vsx.org/vscode/item"
+  }
+}

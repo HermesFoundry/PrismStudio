@@ -1,0 +1,62 @@
+{
+  "name": "prism-claude",
+  "displayName": "Claude",
+  "description": "A Claude session beside your code, and a way to point it at what you are looking at.",
+  "version": "1.0.0",
+  "publisher": "hermesfoundry",
+  "license": "MIT",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "capabilities": {
+    "virtualWorkspaces": false,
+    "untrustedWorkspaces": { "supported": false }
+  },
+  "contributes": {
+    "commands": [
+      { "command": "prismClaude.toggle", "title": "Claude: Open or close Claude" },
+      { "command": "prismClaude.pointAtFile", "title": "Claude: Point Claude at this file" },
+      { "command": "prismClaude.pointAtSelection", "title": "Claude: Point Claude at the selection" },
+      { "command": "prismClaude.restart", "title": "Claude: Restart Claude" }
+    ],
+    "keybindings": [
+      { "command": "prismClaude.toggle", "key": "ctrl+shift+c", "mac": "cmd+shift+c" },
+      { "command": "prismClaude.pointAtFile", "key": "ctrl+alt+a", "mac": "cmd+alt+a",
+        "when": "editorTextFocus" },
+      { "command": "prismClaude.pointAtSelection", "key": "ctrl+alt+s", "mac": "cmd+alt+s",
+        "when": "editorHasSelection && editorTextFocus" }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "prismClaude.pointAtSelection", "group": "navigation@9",
+          "when": "editorHasSelection" }
+      ]
+    },
+    "configuration": {
+      "title": "Claude",
+      "properties": {
+        "prismClaude.command": {
+          "type": "string",
+          "default": "claude",
+          "description": "The command that starts a Claude session. For example \"claude --resume\"."
+        },
+        "prismClaude.location": {
+          "type": "string",
+          "enum": ["panel", "editor"],
+          "enumDescriptions": [
+            "In the panel along the bottom, beside the terminals.",
+            "As a tab in the editor area, so it can be split or moved anywhere."
+          ],
+          "default": "panel",
+          "description": "Where a Claude session opens."
+        },
+        "prismClaude.statusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a Claude entry in the status bar."
+        }
+      }
+    }
+  }
+}

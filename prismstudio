@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# PrismStudio — the VS Code fork. Runs from the built source tree.
+set -u
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
+[ -s "$ROOT/.nvmrc" ] && nvm use "$(cat "$ROOT/.nvmrc")" >/dev/null 2>&1
+cd "$ROOT"
+
+# The pre-launch step re-syncs the built-in extensions from whatever gallery
+# product.json names. Ours is Open VSX, and Open VSX's copies of Microsoft's
+# extensions are different artifacts than the checksums pinned in this repo,
+# so that step aborts and the editor never starts. Electron is downloaded and
+# the tree is compiled, which is everything pre-launch would have done for us.
+export VSCODE_SKIP_PRELAUNCH=1
+
+# Electron's SUID sandbox helper has to be owned by root to be used, and this
+# is a build living in a home directory. Running the renderer unsandboxed is
+# the usual trade for a locally built editor; to have the sandbox instead:
+#   sudo chown root:root .build/electron/chrome-sandbox
+#   sudo chmod 4755 .build/electron/chrome-sandbox
+# and delete the flag below.
+exec ./scripts/code.sh --no-sandbox "$@"
